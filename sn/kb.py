@@ -80,9 +80,18 @@ class KnowledgeBase:
         Output: `[(entity1, relation_name, entity2), (...)]`
         """
         results = tx.run("MATCH (e1)-[r {declarator: $declarator}]->(e2) "
-                        "RETURN e1.name as ent1, r.name as relation, e2.name as ent2", declarator=declarator)
+                        "RETURN e1.name AS ent1, r.name AS relation, e2.name AS ent2", declarator=declarator)
         
         return [(result.ent1, result.relation, result.ent2) for result in results]
+
+    @sn_read
+    @staticmethod
+    def query_declarators(ent1:str, ent2:str, relation:str, relation_type:str, not_:bool, tx: ManagedTransaction=None) -> List[str]:
+        """Obtain all declarators that declared the given relation."""
+        results = tx.run(f"MATCH (e1 {{name: $ent1}})-[r:{relation_type} {{name: $relation, not: $not_}}]->(e2 {{name: $ent2}}) "
+                        "RETURN r.declarator AS declarator", ent1=ent1, relation=relation, ent2=ent2, not_=not_)
+        
+        return [result.declarator for result in results]
 
     @sn_read
     @staticmethod
@@ -111,7 +120,7 @@ class KnowledgeBase:
         """Query an entity to obtain the entities of a specific relation."""
         
         results = tx.run(f"MATCH (e {{name: $ent}})-[r:{relation_type} {{name: $relation}}]->(e2) "
-                        "RETURN e2.name as entity", ent=ent, relation=relation)
+                        "RETURN e2.name AS entity", ent=ent, relation=relation)
         
         return [result.value("entity") for result in results]
         
@@ -131,11 +140,11 @@ class KnowledgeBase:
         results = tx.run(
             f"MATCH (ent1 {{name:$ent}}) "
             "MATCH (ent1)-[r]->(ent2) "
-            "RETURN ent1 as ent, collect(r), collect(ent2)"
+            "RETURN ent1 AS ent, collect(r), collect(ent2)"
             "UNION "
             f"MATCH (ent1 {{name:$ent}})-[:{RelType.INSTANCE.value}|{RelType.SUBTYPE.value} *1..]->(ascn) "
             "MATCH (ascn)-[r]->(ent2) "
-            "RETURN ascn as ent, collect(r), collect(ent2)", ent=ent
+            "RETURN ascn AS ent, collect(r), collect(ent2)", ent=ent
         )
         
         # TODO: process results into final return val
