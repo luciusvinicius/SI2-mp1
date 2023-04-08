@@ -60,10 +60,6 @@ class ConfidenceTable:
         for non_static_declarator in self._non_static_declarators:
             saf = self._get_agreement_factor(non_static_declarator, static=True)
             nsaf = self._get_agreement_factor(non_static_declarator, static=False)
-            
-            # Values are put into the range [0, 1] (previously in range [-1, 1])
-            saf = (saf + 1) / 2
-            nsaf = (nsaf + 1) / 2
 
             self._confidences[non_static_declarator] = min(1.0, self._base_confidence
                 + (1 - self._base_confidence) * saf * self._saf_weight
@@ -170,7 +166,7 @@ class ConfidenceTable:
             Whether to consider only static or non-static declarators
         """
 
-        other_declarators = self._static_declarators if static else self._non_static_declarators
+        other_declarators = (self._static_declarators if static else self._non_static_declarators) - {declarator}
         
         our_declarations = set(self._kb.query_declarations(declarator))
         our_declarations_adversary = {relation.inverse() for relation in our_declarations}
@@ -180,9 +176,6 @@ class ConfidenceTable:
         disagreement_n = 0
 
         for other_declarator in other_declarators:
-            if other_declarator == declarator:
-                continue
-
             their_declarations = set(self._kb.query_declarations(other_declarator))
             other_declarations_n += len(their_declarations)
             agreement_n += len(their_declarations & our_declarations)

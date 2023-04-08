@@ -56,7 +56,7 @@ class Relation:
 
     def inverse(self) -> 'Relation':
         """Return the inverse of this relation, where the `not_` truth value is swapped."""
-        return Relation(self.ent2, self.ent1, self.name, self.type_, not self.not_)
+        return Relation(self.ent1, self.ent2, self.name, self.type_, not self.not_)
 
 class KnowledgeBase:
 
@@ -262,7 +262,7 @@ if __name__ == "__main__":
     confidence_table.register_declarator("Diogo")
     confidence_table.register_declarator("Martinho")
     confidence_table.update_confidences()
-    print('Confidence of (Diogo)-[is]->(Cringe):', confidence_table.get_relation_confidence(Relation("Diogo", "Cringe", "is", RelType.OTHER)))   # 0.765265
+    print('Confidence of (Diogo)-[is]->(Cringe):', confidence_table.get_relation_confidence(Relation("Diogo", "Cringe", "is", RelType.OTHER)))   # 0.4947916666666667
     print('Confidence table:', confidence_table._confidences)
 
     kb.close()
