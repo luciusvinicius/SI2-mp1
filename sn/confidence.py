@@ -1,6 +1,7 @@
-from typing import Dict, List, Set, Tuple
+from typing import Dict, Set, TYPE_CHECKING
 
-from sn.kb import KnowledgeBase
+if TYPE_CHECKING:
+    from kb import KnowledgeBase, Relation
 
 
 class ConfidenceTable:
@@ -14,7 +15,7 @@ class ConfidenceTable:
     There are two types of declarators:
     - Static: their associated confidence is constant.
     This may be attributed, for instance, to trusted knowledge declarators
-    - Non-static: declarators whose confidence mainly depends on the declarations from static declarators.
+    - Non-static: declarators whose confidence mainly depends on the declarations from other declarators.
     By default they have a confidence of 0.5 (50%), which means the system doesn't prefer between trusting
     and not trusting these declarators.
 
@@ -37,7 +38,7 @@ class ConfidenceTable:
     """
 
     def __init__(self,
-                 knowledge_base: KnowledgeBase,
+                 knowledge_base: 'KnowledgeBase',
                  saf_weight: float=0.5,
                  nsaf_weight: float=0.5,
                  base_confidence: float=0.5):
@@ -48,8 +49,8 @@ class ConfidenceTable:
         self._base_confidence = base_confidence
         
         self._confidences:               Dict[str, float]   = {}
-        self._static_declarators:        Set[str]           = []
-        self._non_static_declarators:    Set[str]           = []
+        self._static_declarators:        Set[str]           = set()
+        self._non_static_declarators:    Set[str]           = set()
 
     def update_confidences(self):
         """Update all confidence values of non-static declarators, since they are variable.
@@ -94,19 +95,21 @@ class ConfidenceTable:
             self._confidences[declarator] = self._base_confidence
             self._non_static_declarators.add(declarator)
 
-    def get_relation_confidence(self, ent1: str, ent2: str, relation: str, relation_type: str, not_: bool=True) -> float:
+    def get_relation_confidence(self, relation: 'Relation') -> float:
         """Obtain the confidence of the given relation based on its declarators' confidence values.
         
+        The relation confidence is calculated as the maximum value between:
+        - the "aggregated" confidences of the static declarators involved in the relation
+        - the "aggregated" confidences of the non-static declarators involved in the relation
+
+        The "aggregation" of declarator confidences is given by the mean value between `dt` and `1 - df`, where:
+        - `dt` is the greatest declarator confidence for the queried relation
+        - `df` is the greatest declarator confidence for the inverse of the queried relation
+
         Parameters
         ----------
-        ent1 : str
-            The first entity of the declared relation
-        ent2 : str
-            The second entity of the declared relation
-        relation : str
-            The name of the declared relation
-        relation_type : str
-            The type of the declared relation (given by the enum `RelType`)
+        relation : Relation
+            The relation to obtain the confidence of
 
         Returns
         -------
@@ -114,8 +117,8 @@ class ConfidenceTable:
             The declaration's confidence, or `None` the relation wasn't declared
         """
 
-        declarators = self._kb.query_declarators(ent1, ent2, relation, relation_type, not_=not_)
-        adversary_declarators = self._kb.query_declarators(ent1, ent2, relation, relation_type, not_=not not_)
+        declarators = self._kb.query_declarators(relation)
+        adversary_declarators = self._kb.query_declarators(relation.inverse())
 
         obtain_confidences = lambda ds, filter_ds: {self._confidences[declarator] for declarator in ds if declarator in filter_ds}
 
@@ -125,8 +128,21 @@ class ConfidenceTable:
         adversary_static_confidences = obtain_confidences(adversary_declarators, self._static_declarators)
         adversary_non_static_confidences = obtain_confidences(adversary_declarators, self._non_static_declarators)
 
-        greatest_static_confidence = (max(static_confidences) + (1 - max(adversary_static_confidences))) / 2
-        greatest_non_static_confidence = (max(non_static_confidences) + (1 - max(adversary_non_static_confidences))) / 2
+        if len(static_confidences) > 0:
+            if len(adversary_static_confidences) > 0:
+                greatest_static_confidence = (max(static_confidences) + (1 - max(adversary_static_confidences))) / 2
+            else:
+                greatest_static_confidence = max(static_confidences)
+        else:
+            greatest_static_confidence = 0
+        
+        if len(non_static_confidences) > 0:
+            if len(adversary_non_static_confidences) > 0:
+                greatest_non_static_confidence = (max(non_static_confidences) + (1 - max(adversary_non_static_confidences))) / 2
+            else:
+                greatest_non_static_confidence = max(non_static_confidences)
+        else:
+            greatest_non_static_confidence = 0
         
         return max(greatest_static_confidence, greatest_non_static_confidence)
 
@@ -144,7 +160,7 @@ class ConfidenceTable:
         base from the other declarators `D`
 
         "Agreement" is defined as matching all of the relation's attributes including the `not_` attribute.
-        "Disagreement", on the other hand, is defined as matching all of the relation's attributes except the `not_` attribute.
+        "Disagreement", on the other hand, is defined as matching all of the relation's attributes but not the `not_` attribute.
 
         Parameters
         ----------
@@ -153,12 +169,11 @@ class ConfidenceTable:
         static : bool
             Whether to consider only static or non-static declarators
         """
+
         other_declarators = self._static_declarators if static else self._non_static_declarators
         
         our_declarations = set(self._kb.query_declarations(declarator))
-        our_declarations_adversary = our_declarations.copy()
-        for relation in our_declarations_adversary:
-            relation.not_ = not relation.not_
+        our_declarations_adversary = {relation.inverse() for relation in our_declarations}
 
         other_declarations_n = 0
         agreement_n = 0
