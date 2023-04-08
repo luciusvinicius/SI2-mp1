@@ -94,11 +94,14 @@ class KnowledgeBase:
         
         `relation.name` is the name given to the relation, and is only relevant with the OTHER relation type.
         """
+        
+        new_ent1 = f"n_{relation.ent1}" if relation.ent1[0].isdigit() else relation.ent1 
+        new_ent2 = f"n_{relation.ent2}" if relation.ent2[0].isdigit() else relation.ent2
 
-        result = tx.run(f"MERGE (e1:{relation.ent1.replace(' ', '')} {{name: $ent1}}) "
-                        f"MERGE (e2:{relation.ent2.replace(' ', '')} {{name: $ent2}}) "
+        result = tx.run(f"MERGE (e1:{new_ent1.replace(' ', '')} {{name: $ent1}}) "
+                        f"MERGE (e2:{new_ent2.replace(' ', '')} {{name: $ent2}}) "
                         f"MERGE (e1)-[r:{relation.type_.value} {{declarator: $declarator, name: $relation, not: $not_}}]->(e2) "
-                        "RETURN e1.name", declarator=declarator, ent1=relation.ent1, ent2=relation.ent2, relation=relation.name, not_=relation.not_)
+                        "RETURN e1.name", declarator=declarator, ent1=new_ent1, ent2=new_ent2, relation=relation.name, not_=relation.not_)
         
         return result.single()[0]
     
