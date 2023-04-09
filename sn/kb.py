@@ -5,9 +5,12 @@ from typing import List, Tuple, Dict
 
 from sn.confidence import ConfidenceTable
 
-class RelType(Enum):
+class EntityType(Enum):
+    TYPE = "Type"
     INSTANCE = "Instance"
-    SUBTYPE = "Subtype"
+
+class RelType(Enum):
+    INHERITS = "Inherits"
     OTHER = "Other"
 
 # Decorator for read operations
@@ -36,8 +39,12 @@ class Relation:
     ----------
     ent1 : str
         The first entity of the relation
+    ent1_type : EntityType
+        The type of the first entity
     ent2 : str
         The second entity of the relation
+    ent2_type : EntityType
+        The type of the second entity
     name : str
         The name of the relation
     type_ : RelType
@@ -46,15 +53,17 @@ class Relation:
         Whether the relation is negated
     """
     
-    ent1:   str
-    ent2:   str
-    name:   str
-    type_:  RelType
-    not_:   bool    = False
+    ent1:       str
+    ent1_type:  EntityType
+    ent2:       str
+    ent2_type:  EntityType
+    name:       str
+    type_:      RelType
+    not_:       bool        = False
 
     def inverse(self) -> 'Relation':
         """Return the inverse of this relation, where the `not_` truth value is swapped."""
-        return Relation(self.ent1, self.ent2, self.name, self.type_, not self.not_)
+        return Relation(self.ent1, self.ent1_type, self.ent2, self.ent2_type, self.name, self.type_, not self.not_)
     
     def __str__(self) -> str:
         return f"({self.ent1})-[{self.name}]->({self.ent2})"
@@ -86,9 +95,8 @@ class KnowledgeBase:
     @staticmethod
     def add_knowledge(declarator:str, relation: Relation, tx: ManagedTransaction=None):
         """`declarator` states that `relation.ent1` has a `relation.name` with `relation.ent2`.
-        `relation.type_` is one of 3 types:
-            - INSTANCE: (Diogo is a Person).
-            - SUBTYPE: (Person is a Mammal).
+        `relation.type_` is one of 2 types:
+            - INHERITS: (Diogo is a Person).
             - OTHER: Literally any other relation.
             
         Use `RelType` enum to specify which one.
@@ -96,11 +104,14 @@ class KnowledgeBase:
         `relation.name` is the name given to the relation, and is only relevant with the OTHER relation type.
         """
         
+        if relation.type_.INHERITS and relation.ent2_type != EntityType.TYPE:
+            raise ValueError("Can only inherit from types entities.")
+
         new_ent1 = f"n_{relation.ent1}" if relation.ent1.isdigit() else relation.ent1 
         new_ent2 = f"n_{relation.ent2}" if relation.ent2.isdigit() else relation.ent2
 
-        result = tx.run(f"MERGE (e1:{new_ent1.replace(' ', '')} {{name: $ent1}}) "
-                        f"MERGE (e2:{new_ent2.replace(' ', '')} {{name: $ent2}}) "
+        result = tx.run(f"MERGE (e1:{relation.ent1_type.value} {{name: $ent1}}) "
+                        f"MERGE (e2:{relation.ent2_type.value} {{name: $ent2}}) "
                         f"MERGE (e1)-[r:{relation.type_.value} {{declarator: $declarator, name: $relation, not: $not_}}]->(e2) "
                         "RETURN e1.name", declarator=declarator, ent1=new_ent1, ent2=new_ent2, relation=relation.name, not_=relation.not_)
         
@@ -113,11 +124,13 @@ class KnowledgeBase:
         Output: `[relation1, relation2, (...)]`
         """
         results = tx.run("MATCH (e1)-[r {declarator: $declarator}]->(e2) "
-                        "RETURN e1.name AS ent1, type(r) as relation_type, r.name AS relation, e2.name AS ent2, r.not as not", declarator=declarator)
+                        "RETURN e1.name AS ent1, labels(e1)[0] AS ent1_type, type(r) AS relation_type, r.name AS relation, e2.name AS ent2, labels(e2)[0] AS ent2_type, r.not AS not", declarator=declarator)
         
         return [Relation(
             ent1=result.value("ent1"),
+            ent1_type=EntityType(result.value("ent1_type")),
             ent2=result.value("ent2"),
+            ent2_type=EntityType(result.value("ent2_type")),
             name=result.value("relation"),
             type_=result.value("relation_type"),
             not_=result.value("not")
@@ -127,7 +140,7 @@ class KnowledgeBase:
     @staticmethod
     def query_declarators(relation: Relation, tx: ManagedTransaction=None) -> List[str]:
         """Obtain all declarators that declared the given relation."""
-        results = tx.run(f"MATCH (e1 {{name: $ent1}})-[r:{relation.type_.value} {{name: $relation, not: $not_}}]->(e2 {{name: $ent2}}) "
+        results = tx.run(f"MATCH (e1:{relation.ent1_type} {{name: $ent1}})-[r:{relation.type_.value} {{name: $relation, not: $not_}}]->(e2{relation.ent2_type} {{name: $ent2}}) "
                         "RETURN r.declarator AS declarator", ent1=relation.ent1, relation=relation.name, ent2=relation.ent2, not_=relation.not_)
         
         return [result.value("declarator") for result in results]
@@ -166,7 +179,7 @@ class KnowledgeBase:
     @sn_read
     @staticmethod
     def query_inheritance(ent:str, tx: ManagedTransaction=None) -> Dict[str, Tuple[List[str], int]]:
-        """Query all local attributes of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations"""
+        """Query all local attributes of an entity as well as attributes inherited from INHERITS relations"""
         
         # logicks: query_local for ent + query_inheritance for ascendants
         
@@ -181,7 +194,7 @@ class KnowledgeBase:
             "MATCH (ent1)-[r]->(ent2) "
             "RETURN ent1.name AS subject, collect(ent2.name) AS characteristics, 0 AS distance "
             "UNION "
-            f"MATCH p = (ent1 {{name:$ent}})-[:{RelType.INSTANCE.value}|{RelType.SUBTYPE.value} *1..]->(ascn) "
+            f"MATCH p = (ent1 {{name:$ent}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
             "MATCH (ascn)-[r]->(ent2) "
             "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, length(p) AS distance", ent=ent
         )
@@ -199,7 +212,7 @@ class KnowledgeBase:
             "MATCH (ent1)-[r {name:$relation}]->(ent2) "
             "RETURN ent1.name AS subject, collect(ent2.name) AS characteristics, 0 AS distance "
             "UNION "
-            f"MATCH p = (ent1 {{name:$ent}})-[:{RelType.INSTANCE.value}|{RelType.SUBTYPE.value} *1..]->(ascn) "
+            f"MATCH p = (ent1 {{name:$ent}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
             "MATCH (ascn)-[r {name:$relation}]->(ent2) "
             "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, length(p) AS distance", ent=ent, relation=relation
         )
@@ -218,7 +231,7 @@ class KnowledgeBase:
     def query_descendants_relation(ent:str, relation:str, relation_type:RelType, tx: ManagedTransaction=None) -> List[str]:
         """Query the specified *local* attribute of entity descendants"""
         
-        results = tx.run(f"MATCH (eOut)<-[:{relation_type.value} {{name: $relation}}]-(desc)-[r:{RelType.INSTANCE.value}|{RelType.SUBTYPE.value} *1..]->(eIn {{name: $entIn}}) "
+        results = tx.run(f"MATCH (eOut)<-[:{relation_type.value} {{name: $relation}}]-(desc)-[r:{RelType.INHERITS.value} *1..]->(eIn {{name: $entIn}}) "
                         "RETURN eOut.name AS other_entity", relation=relation, entIn=ent)
 
         return [result.value("other_entity") for result in results]
@@ -240,22 +253,22 @@ if __name__ == "__main__":
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321") # Security just sent a hug :)
     kb.delete_all() # Don't have memory between run tests
     
-    kb.add_knowledge("Lucius", Relation("Diogo", "Cringe", "is", RelType.OTHER))
-    kb.add_knowledge("Lucius", Relation("Diogo", "Person", "is" , RelType.INSTANCE))
-    kb.add_knowledge("Lucius", Relation("Diogo", "Working", "is", RelType.OTHER))
-    kb.add_knowledge("Diogo", Relation("Lucius", "Bad Declarator", "is", RelType.OTHER))
-    kb.add_knowledge("Diogo", Relation("Lucius", "Mushrooms", "likes", RelType.OTHER))
-    kb.add_knowledge("Diogo", Relation("Lucius", "Shotos", "likes", RelType.OTHER))
-    kb.add_knowledge("Martinho", Relation("Person", "Mammal", "is", RelType.SUBTYPE))
-    kb.add_knowledge("Lucius", Relation("Mammal", "Animal", "is", RelType.SUBTYPE))
-    kb.add_knowledge("Martinho", Relation("Diogo", "Cringe", "is", RelType.OTHER, not_=True))
+    kb.add_knowledge("Lucius", Relation("Diogo", EntityType.INSTANCE, "cringe", EntityType.TYPE, "is", RelType.OTHER))
+    kb.add_knowledge("Lucius", Relation("Diogo", EntityType.INSTANCE, "person", EntityType.TYPE, "is" , RelType.INHERITS))
+    kb.add_knowledge("Lucius", Relation("Diogo", EntityType.INSTANCE, "working", EntityType.TYPE, "is", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("Lucius", EntityType.INSTANCE, "bad declarator", EntityType.TYPE, "is", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("Lucius", EntityType.INSTANCE, "mushrooms", EntityType.TYPE, "likes", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("Lucius", EntityType.INSTANCE, "shotos", EntityType.TYPE, "likes", RelType.OTHER))
+    kb.add_knowledge("Martinho", Relation("Person", EntityType.TYPE, "mammal", EntityType.TYPE, "is", RelType.INHERITS))
+    kb.add_knowledge("Lucius", Relation("Mammal", EntityType.TYPE, "animal", EntityType.TYPE, "is", RelType.INHERITS))
+    kb.add_knowledge("Martinho", Relation("Diogo", EntityType.INSTANCE, "cringe", EntityType.TYPE, "is", RelType.OTHER, not_=True))
     
 
-    kb.add_knowledge("Diogo", Relation("Person", "Food", "eats", RelType.OTHER))
-    kb.add_knowledge("Diogo", Relation("Person", "Beans", "eats", RelType.OTHER))
-    kb.add_knowledge("Diogo", Relation("Diogo", "Chips", "eats", RelType.OTHER))
-    kb.add_knowledge("Lucius", Relation("Mammal", "Banana", "eats", RelType.OTHER))
-    kb.add_knowledge("Lucius", Relation("Animal", "Water", "drinks", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("Person", EntityType.TYPE, "food", EntityType.TYPE, "eats", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("Person", EntityType.TYPE, "beans", EntityType.TYPE, "eats", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("Diogo", EntityType.INSTANCE, "chips", EntityType.TYPE, "eats", RelType.OTHER))
+    kb.add_knowledge("Lucius", Relation("Mammal", EntityType.TYPE, "banana", EntityType.TYPE, "eats", RelType.OTHER))
+    kb.add_knowledge("Lucius", Relation("Animal", EntityType.TYPE, "water", EntityType.TYPE, "drinks", RelType.OTHER))
 
     
     

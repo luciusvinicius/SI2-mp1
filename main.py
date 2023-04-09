@@ -1,7 +1,7 @@
 import spacy
 from spacy import displacy
 from typing import Dict, List
-from sn.kb import KnowledgeBase, RelType, Relation
+from sn.kb import EntityType, KnowledgeBase, RelType, Relation
 from sn.confidence import ConfidenceTable
 from copy import copy
 
@@ -19,6 +19,7 @@ class Triples:
 class Entity:
     def __init__(self, name) -> None:
         self.name = str(name)
+        self.pos_ = name.pos_
 
     def prefix(self, val):
         self.name = f"{val} {self.name}"
@@ -51,12 +52,14 @@ def build_entity(token) -> str:
     
     return output
 
+def get_entity_type(token) -> EntityType:
+    return EntityType.INSTANCE if token.pos_ == "PROPN" else EntityType.TYPE
 
 
 def main():
     user = input("Please insert your username: ")
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
-    kb.delete_all()
+    # kb.delete_all()
     confidence_table = ConfidenceTable(kb)
     nlp = init()
     print("(!) Hello, how can I help you? (q! - quit)")
@@ -79,14 +82,12 @@ def main():
         
         if word[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
             query_knowledge(user, doc, kb)
-            confidence_table.get_relation_confidence(Relation())
+            # confidence_table.get_relation_confidence(Relation())
         else:
             add_knowledge(user, doc, kb)
             confidence_table.register_declarator(user)
             confidence_table.update_confidences()
 
-        
-        
 
         # Output text based on stuff that was done
         
@@ -100,7 +101,7 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     
     root = [token for token in doc if token.head == token][0]
     
-    nsubject = [token for token in root.lefts if token.dep_ == "nsubj"][0] # What Diogo likes VS What does Diogo likes
+    nsubject = [token for token in root.children if token.dep_ == "nsubj"][0] # What Diogo likes VS What does Diogo likes
     nobj = list(root.rights)[0]
 
     # Verify possessives
@@ -109,6 +110,7 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     # base entities and rel
     entity1 = possessives[0] if possessives else nsubject
     rel = nsubject if possessives else root.lemma_
+    
     # entity2 = build_entity(nobj) entity 2 only for boolean questions maybe?
     
     
@@ -194,10 +196,12 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     for token in doc:
         print(token, token.pos_, list(token.children), token.dep_)
 
-    kb_type = RelType.INSTANCE if str(relation) == "be" else RelType.OTHER
+    kb_type = RelType.INHERITS if str(relation) == "be" else RelType.OTHER
+    ent1_type = get_entity_type(entity1)
+    ent2_type = get_entity_type(entity2)
     
-    new_relation = Relation(str(entity1), str(entity2).strip(), str(relation), kb_type)
-    # print(f"{new_relation=}")
+    
+    new_relation = Relation(str(entity1), ent1_type, str(entity2).strip(), ent2_type, str(relation), kb_type)
 
     kb.add_knowledge(user, new_relation)
 
