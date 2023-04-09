@@ -1,7 +1,7 @@
 import spacy
 from spacy import displacy
 from typing import Dict, List
-from sn.kb import KnowledgeBase, RelType
+from sn.kb import KnowledgeBase, RelType, Relation
 from copy import copy
 
 # namedtuple?
@@ -110,7 +110,7 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     
     kb_type = RelType.INSTANCE if str(rel) == "is" else RelType.OTHER
     
-    query = kb.query_local_relation(str(entity1), str(rel), kb_type)
+    query = kb.query_inheritance_relation(str(entity1), str(rel))
     print(f"{query=}")
     
     return entity1, rel, query
@@ -169,8 +169,8 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     base_triplet = Triples(entity1, entity2, relation)
     knowledge.append(base_triplet)
 
-    for k in knowledge:
-        print(k)
+    # for k in knowledge:
+    #     print(k)
 
     # add other tokens
     
@@ -187,9 +187,12 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     for token in doc:
         print(token, token.pos_, list(token.children), token.dep_)
 
-    kb_type = RelType.INSTANCE if str(relation) == "is" else RelType.OTHER
+    kb_type = RelType.INSTANCE if str(relation) == "be" else RelType.OTHER
+    
+    new_relation = Relation(str(entity1), str(entity2).strip(), str(relation), kb_type)
+    # print(f"{new_relation=}")
 
-    kb.add_knowledge(user, str(entity1), str(entity2).strip(), str(relation), kb_type)
+    kb.add_knowledge(user, new_relation)
 
 
 if __name__ == '__main__':

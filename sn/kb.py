@@ -1,11 +1,9 @@
 from dataclasses import dataclass
 from neo4j import GraphDatabase, ManagedTransaction
 from enum import Enum
-from typing import List, Tuple, TypeVar
+from typing import List, Tuple, Dict
 
-from confidence import ConfidenceTable
-
-T = TypeVar('T')
+from sn.confidence import ConfidenceTable
 
 class RelType(Enum):
     INSTANCE = "Instance"
@@ -57,6 +55,9 @@ class Relation:
     def inverse(self) -> 'Relation':
         """Return the inverse of this relation, where the `not_` truth value is swapped."""
         return Relation(self.ent1, self.ent2, self.name, self.type_, not self.not_)
+    
+    def __str__(self) -> str:
+        return f"({self.ent1})-[{self.name}]->({self.ent2})"
 
 class KnowledgeBase:
 
@@ -95,8 +96,8 @@ class KnowledgeBase:
         `relation.name` is the name given to the relation, and is only relevant with the OTHER relation type.
         """
         
-        new_ent1 = f"n_{relation.ent1}" if relation.ent1[0].isdigit() else relation.ent1 
-        new_ent2 = f"n_{relation.ent2}" if relation.ent2[0].isdigit() else relation.ent2
+        new_ent1 = f"n_{relation.ent1}" if relation.ent1.isdigit() else relation.ent1 
+        new_ent2 = f"n_{relation.ent2}" if relation.ent2.isdigit() else relation.ent2
 
         result = tx.run(f"MERGE (e1:{new_ent1.replace(' ', '')} {{name: $ent1}}) "
                         f"MERGE (e2:{new_ent2.replace(' ', '')} {{name: $ent2}}) "
@@ -164,7 +165,7 @@ class KnowledgeBase:
         
     @sn_read
     @staticmethod
-    def query_inheritance(ent:str, tx: ManagedTransaction=None) -> List[Tuple[str, List[str]]]:
+    def query_inheritance(ent:str, tx: ManagedTransaction=None) -> Dict[str, Tuple[List[str], int]]:
         """Query all local attributes of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations"""
         
         # logicks: query_local for ent + query_inheritance for ascendants
@@ -178,25 +179,33 @@ class KnowledgeBase:
         results = tx.run(
             f"MATCH (ent1 {{name:$ent}}) "
             "MATCH (ent1)-[r]->(ent2) "
-            "RETURN ent1 AS ent, collect(r), collect(ent2)"
+            "RETURN ent1.name AS subject, collect(ent2.name) AS characteristics, 0 AS distance "
             "UNION "
-            f"MATCH (ent1 {{name:$ent}})-[:{RelType.INSTANCE.value}|{RelType.SUBTYPE.value} *1..]->(ascn) "
+            f"MATCH p = (ent1 {{name:$ent}})-[:{RelType.INSTANCE.value}|{RelType.SUBTYPE.value} *1..]->(ascn) "
             "MATCH (ascn)-[r]->(ent2) "
-            "RETURN ascn AS ent, collect(r), collect(ent2)", ent=ent
+            "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, length(p) AS distance", ent=ent
         )
         
-        # TODO: process results into final return val
-
-
-        return list(results)
+        return {result.value('subject'):(result.value('characteristics'), result.value('distance')) for result in results}
 
     @sn_read
     @staticmethod
-    def query_inheritance_relation(ent:str, relation:str, relation_type:RelType, tx: ManagedTransaction=None) -> List[str]:
-        """Query the specified attribute of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations"""
-        # Unary values would be used in a shortest path context. ig
-        raise NotImplementedError()
-    
+    def query_inheritance_relation(ent:str, relation:str, tx: ManagedTransaction=None) ->  Dict[str, Tuple[List[str], int]]:
+        """Query the specified attribute of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations.
+        The output is each Entity in the key, the characteristics and distance as the tuple elements"""
+        
+        results = tx.run(
+            f"MATCH (ent1 {{name:$ent}}) "
+            "MATCH (ent1)-[r {name:$relation}]->(ent2) "
+            "RETURN ent1.name AS subject, collect(ent2.name) AS characteristics, 0 AS distance "
+            "UNION "
+            f"MATCH p = (ent1 {{name:$ent}})-[:{RelType.INSTANCE.value}|{RelType.SUBTYPE.value} *1..]->(ascn) "
+            "MATCH (ascn)-[r {name:$relation}]->(ent2) "
+            "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, length(p) AS distance", ent=ent, relation=relation
+        )
+        
+        return {result.value('subject'):(result.value('characteristics'), result.value('distance')) for result in results}
+        
     @sn_read
     @staticmethod
     def query_descendants(ent:str, tx: ManagedTransaction=None) -> List[Tuple[str, str, List[str]]]:
@@ -222,7 +231,7 @@ class KnowledgeBase:
         return result.single()
     
 
-    # # nice >:]
+    # # # nice >:]
 
 
 
