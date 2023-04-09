@@ -1,10 +1,7 @@
 import pytest
-from typing import Dict, List
 from sn.kb import EntityType, KnowledgeBase, RelType, Relation
-from sn.confidence import ConfidenceTable
-from copy import copy
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="module", autouse=True)
 def initialize_knowledge_base():
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
     kb.delete_all()
@@ -36,7 +33,9 @@ def data1(initialize_knowledge_base):
     kb.add_knowledge("Lucius", Relation("mammal", EntityType.TYPE, "banana", EntityType.TYPE, "eats", RelType.OTHER))
     kb.add_knowledge("Lucius", Relation("animal", EntityType.TYPE, "water", EntityType.TYPE, "drinks", RelType.OTHER))
     
-    return kb
+    yield kb
+
+    kb.delete_all()
 
 @pytest.fixture()
 def data2(initialize_knowledge_base):
@@ -56,7 +55,9 @@ def data2(initialize_knowledge_base):
     
     kb.add_knowledge("Diogo", Relation("Diogo", EntityType.INSTANCE, "chips", EntityType.TYPE, "eats", RelType.OTHER))
     
-    return kb
+    yield kb
+
+    kb.delete_all()
     
 
 def test_diogo_eats(data1):
@@ -69,10 +70,11 @@ def test_diogo_eats(data1):
         "mammal": (["banana"], 2),
         
     }
+
     assert kb.query_inheritance_relation("Diogo", "eats") == output
     
 
-def test_test(data2):
+def test_diogo_eats_chips(data2):
     
     kb = data2
 
@@ -80,4 +82,5 @@ def test_test(data2):
         "Diogo": (["chips"], 0),
         
     }
+
     assert kb.query_inheritance_relation("Diogo", "eats") == output
