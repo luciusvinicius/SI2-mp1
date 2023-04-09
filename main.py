@@ -2,6 +2,7 @@ import spacy
 from spacy import displacy
 from typing import Dict, List
 from sn.kb import KnowledgeBase, RelType, Relation
+from sn.confidence import ConfidenceTable
 from copy import copy
 
 # namedtuple?
@@ -56,6 +57,7 @@ def main():
     user = input("Please insert your username: ")
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
     kb.delete_all()
+    confidence_table = ConfidenceTable(kb)
     nlp = init()
     print("(!) Hello, how can I help you? (q! - quit)")
     while True:
@@ -73,10 +75,15 @@ def main():
         
         # If is a question
         
-        if text[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
+        word = text.split(" ")[0]
+        
+        if word[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
             query_knowledge(user, doc, kb)
+            confidence_table.get_relation_confidence(Relation())
         else:
             add_knowledge(user, doc, kb)
+            confidence_table.register_declarator(user)
+            confidence_table.update_confidences()
 
         
         
