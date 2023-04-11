@@ -77,6 +77,9 @@ def main():
 # What Diogo like?
 # What does Diogo like?
 # What Diogo's dog eat?
+
+# What does <entity> <rel>?
+# Does <entity1> <rel> <entity2>? Example: does Joana eat bananas?
 def query_knowledge(user:str, doc, kb: KnowledgeBase):
     
     for token in doc:
@@ -84,29 +87,53 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     
     root = [token for token in doc if token.head == token][0]
     
-    nsubject = [token for token in root.children if token.dep_ == "nsubj"][0] # What Diogo likes VS What does Diogo likes
-    nobj = list(root.rights)[0]
+    possible_subjects = [token for token in root.children if token.dep_ == "nsubj"] # What Diogo likes VS What does Diogo likes
+    
+    # Boolean question specific use cases (that for some reason treats "like" as preposition)
+    # e.g.: "Does Diogo like rice?"
+    if len(possible_subjects) == 0:
+        nsubject = root
+        rel = [token for token in root.children if token.dep_ == "prep"][0]
+        entity2 = [token for token in rel.children if token.dep_ == "pobj"][0]
+        
+        print(f"Question triplet: {nsubject}, {rel}, {entity2}")
+        return query_boolean(nsubject, rel, entity2, kb)
+    
+    
+    nsubject = possible_subjects[0]
 
     # Verify possessives
     possessives = [child for child in nsubject.children if child.dep_ == "poss"]
 
     # base entities and rel
-    entity1 = possessives[0] if possessives else nsubject
+    entity1 = possessives[0] if possessives else nsubject # TODO change to get object ("Diogo's dog" is returning only "dog")
     rel = nsubject if possessives else root.lemma_
+    entity2 = [child for child in root.children if child.dep_ == "dobj" and child.pos_.lower() != "pron"]
     
-    # entity2 = build_entity(nobj) entity 2 only for boolean questions maybe?
+    # Not a boolean question
+    if len(entity2) == 0:
     
-    
-    
-    print(f"Triplet cringe: {entity1}, {rel}")
-    
-    kb_type = RelType.INSTANCE if str(rel) == "is" else RelType.OTHER
-    
-    query = kb.query_inheritance_relation(str(entity1), str(rel))
-    print(f"{query=}")
-    
-    return entity1, rel, query
-    
+        # entity2 = build_entity(nobj) entity 2 only for boolean questions maybe?
+        
+        
+        # kb_type = RelType.INHERITS if str(rel) == "is" else RelType.OTHER
+        
+        print(f"Question dupla: {nsubject}, {rel}")
+        
+        
+        query = kb.query_inheritance_relation(str(entity1), str(rel))
+        
+        return entity1, rel, query
+    else:
+        print(f"Question tripla bool: {nsubject}, {rel}, {entity2}")
+        
+        return query_boolean(entity1, rel, entity2[0], kb)
+            
+
+def query_boolean(ent1, rel, ent2, kb:KnowledgeBase):
+    relation = Relation(str(ent1), None, str(ent2), None, str(rel), None)
+    print(f"{relation=}")
+    return kb.assert_relation_inheritance(relation)
 
 def add_knowledge(user:str, doc, kb: KnowledgeBase):
     print("TEST")

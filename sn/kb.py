@@ -39,27 +39,27 @@ class Relation:
     ----------
     ent1 : str
         The first entity of the relation
-    ent1_type : EntityType
-        The type of the first entity
+    ent1_type : EntityType | None
+        The type of the first entity, optional
     ent2 : str
         The second entity of the relation
-    ent2_type : EntityType
-        The type of the second entity
+    ent2_type : EntityType | None
+        The type of the second entity, optional
     name : str
         The name of the relation
-    type_ : RelType
-        The type of the relation
+    type_ : RelType | None
+        The type of the relation, optional
     not_ : bool
         Whether the relation is negated
     """
     
     ent1:       str
-    ent1_type:  EntityType
+    ent1_type:  EntityType | None
     ent2:       str
-    ent2_type:  EntityType
+    ent2_type:  EntityType | None
     name:       str
-    type_:      RelType
-    not_:       bool        = False
+    type_:      RelType | None
+    not_:       bool                = False
 
     def inverse(self) -> 'Relation':
         """Return the inverse of this relation, where the `not_` truth value is swapped."""
@@ -81,7 +81,8 @@ class KnowledgeBase:
     # E.gs.: 
     # greeter.delete_all()
     # greeter.add_knowledge("Lucius", "Diogo", "Cringe", RelType.OTHER, "is")
-    
+
+    # TODO: verify if inverse of relation is already in the KnowledgeBase?    
     @sn_write
     @staticmethod
     def add_knowledge(declarator:str, relation: Relation, tx: ManagedTransaction=None):
@@ -93,10 +94,15 @@ class KnowledgeBase:
         Use `RelType` enum to specify which one.
         
         `relation.name` is the name given to the relation, and is only relevant with the OTHER relation type.
+
+        `relation` should not have `None` values for the type fields.
         """
         
         if relation.type_.INHERITS and relation.ent2_type != EntityType.TYPE:
             raise ValueError("Can only inherit from types entities.")
+
+        if relation.ent1_type is None or relation.ent2_type is None or relation.type_ is None:
+            raise ValueError("Relation and entity types shold not be None.")
 
         new_ent1 = f"n_{relation.ent1}" if relation.ent1.isdigit() else relation.ent1 
         new_ent2 = f"n_{relation.ent2}" if relation.ent2.isdigit() else relation.ent2
@@ -226,6 +232,40 @@ class KnowledgeBase:
                         "RETURN eOut.name AS other_entity", relation=relation, entIn=ent)
 
         return [result.value("other_entity") for result in results]
+
+    @sn_read
+    @staticmethod
+    def assert_relation(relation: Relation, tx: ManagedTransaction=None) -> bool:
+        """Assert whether or not `relation` exists in the knowledge base"""
+
+        results = tx.run(f"RETURN exists((e1:{relation.ent1_type.value} {{name: $ent1}})-[r:{relation.type_.value} {{name: $relation, not: $not_}}]->(e2:{relation.ent2_type.value} {{name: $ent2}})) AS relation_exists")
+
+        return results.single().value("relation_exists")
+
+    @sn_read
+    @staticmethod
+    def assert_relation_inheritance(relation: Relation, tx: ManagedTransaction=None) -> bool:
+        """Assert whether or not `relation` exists in the knowledge base, with inheritance"""
+
+        results = tx.run(
+            f"MATCH p = (e1 {{name: $ent1}})-[r {{name: $relation, not: $not_}}]->(e2 {{name: $ent2}}) "
+            "RETURN exists(p) AS relation_exists "
+            "UNION "
+            f"MATCH p = (e1 {{name: $ent1}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
+            f"MATCH (ascn)-[r {{name:$relation}}]->(e2 {{name: $ent2}}) "
+            "RETURN exists(p) AS relation_exists", ent1=relation.ent1, ent2=relation.ent2, relation=relation.name
+        )
+
+        return any(result.value("relation_exists") for result in results)
+
+    @sn_read
+    @staticmethod
+    def get_all_declarators(tx: ManagedTransaction=None) -> List[str]:
+        """Get all unique declarators of knowledge."""
+
+        results = tx.run(f"MATCH ()-[r]->() RETURN DISTINCT r.declarator AS declarator")
+
+        return [result.value("declarator") for result in results]
 
     @sn_write
     @staticmethod
