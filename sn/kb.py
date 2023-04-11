@@ -92,7 +92,7 @@ class KnowledgeBase:
     # greeter.add_knowledge("Lucius", "Diogo", "Cringe", RelType.OTHER, "is")
     
     @sn_write
-    #@staticmethod
+    @staticmethod
     def add_knowledge(declarator:str, relation: Relation, tx: ManagedTransaction=None):
         """`declarator` states that `relation.ent1` has a `relation.name` with `relation.ent2`.
         `relation.type_` is one of 2 types:

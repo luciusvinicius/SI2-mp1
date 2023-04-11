@@ -3,7 +3,7 @@ from sn.kb import EntityType, KnowledgeBase, RelType, Relation
 
 @pytest.fixture(scope="module", autouse=True)
 def initialize_knowledge_base():
-    kb = KnowledgeBase("bolt://localhost:7686", "neo4j", "Sussy_baka123321")
+    kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
     kb.delete_all()
     
     yield kb
