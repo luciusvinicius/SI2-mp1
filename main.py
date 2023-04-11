@@ -2,6 +2,7 @@ import spacy
 from spacy import displacy
 from typing import Dict, List
 #from sn.kb import KnowledgeBase
+from copy import copy
 
 # namedtuple?
 class Triples:
@@ -12,6 +13,27 @@ class Triples:
 
     def __hash__(self) -> int:
         return hash(self.ent1) + hash(self.ent2) + hash(self.rel)
+    
+    def __str__(self) -> str:
+        return f"Triplet: {self.ent1} - {self.rel} -> {self.ent2}"
+    
+    def __repr__(self) -> str:
+        return f"Triplet: {self.ent1} - {self.rel} -> {self.ent2}"
+    
+class Entity:
+    def __init__(self, name) -> None:
+        self.name = str(name)
+
+    def prefix(self, val):
+        self.name = f"{val} {self.name}"
+        return self
+
+    def sufix(self, val):
+        self.name = f"{self.name} {val}"
+        return self
+
+    def __repr__(self) -> str:
+        return self.name
 
 
 def init() -> spacy.Language:
@@ -45,6 +67,11 @@ def main():
         # Do stuff with text
         doc = nlp(text)
 
+        # ------ DEBUG PRINT -----
+        for token in doc:
+            print(token, token.pos_, list(token.children), token.dep_)
+        
+
         # --------- DEBUG: SHOW TREE ---------
         #displacy.serve(doc, auto_select_port=True, style="dep")
 
@@ -63,17 +90,47 @@ def main():
         
         #######################################
 
+        knowledge = []
+
         root = [token for token in doc if token.head == token][0]
+
         nsubject = list(root.lefts)[0] # Está na documentação -- Lucius. Mentirosos >:(
-        nobj = list(root.rights)[0]
+        nobj = list(root.rights)[0] if list(root.rights) else root
 
         # Verify possessives
         possessives = [child for child in nsubject.children if child.dep_ == "poss"]
 
         # base entities and rel
-        entity1 = possessives[0] if possessives else nsubject
-        rel = nsubject if possessives else root
-        entity2 = build_entity(nobj)
+        entity1 = Entity(possessives[0]) if possessives else Entity(nsubject)
+        relation= nsubject if possessives else root
+        entity2 = Entity(nobj)
+
+        if nobj.dep_ == "xcomp":
+            entity2.sufix()
+
+        for child in nobj.children:
+            print(f"{child} {child.pos_} {child.dep_}")
+            if child.dep_ == "poss":
+                ent1 = copy(entity2)
+                ent1.prefix(child)
+                rel = "instance"
+                ent2 = copy(entity2)
+                triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
+                knowledge.append(triplet)
+
+                ent1 = child
+                ent2 = entity2.prefix(child)
+                rel = "has"
+                triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
+                knowledge.append(triplet)
+            elif child.dep_ == "amod":
+                entity2.prefix(child)
+            elif child.dep_ == "xcomp":
+                entity2.sufix(child)
+
+        base_triplet = Triples(entity1, entity2, relation)
+        knowledge.append(base_triplet)
+
 
         # add other tokens
         
@@ -85,14 +142,9 @@ def main():
         # hotashi's    gameplay
         # POSS   CASE  DOBJ 
 
-
-        # ------ DEBUG PRINT -----
-        for token in doc:
-            print(token, token.pos_, list(token.children), token.dep_)
-        
-
-        print(f"Triplet cringe: {entity1}, {rel}, {entity2}")
-        print("Triplet cringier:", entity1, rel, entity2, sep=", ")
+        for k in knowledge:
+            print(k)
+        #print(f"Triplet cringe: {entity1}, {rel}, {entity2}")
 
 
         # Output text based on stuff that was done
