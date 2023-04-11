@@ -76,15 +76,6 @@ class KnowledgeBase:
     def close(self):
         self.driver.close()
     
-    # def get_enums(self, args: Tuple[str|RelType]) -> Tuple[str]:
-    #     """Given a list of args, convert all `RelType` enums to their corresponding string value."""
-    #     new_args = list(args)
-    #     for i, a in enumerate(new_args):
-    #         if isinstance(a, RelType):
-    #             new_args[i] = a.value
-        
-    #     return tuple(new_args)
-
     # ------------------------ Query Methods --------------------------
     # Methods for interacting with the knowledge base. Any value passed to the `tx` argument is ignored.
     # E.gs.: 

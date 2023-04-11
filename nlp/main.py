@@ -41,7 +41,7 @@ def get_entity_type(token) -> EntityType:
 
 def main():
     user = input("Please insert your username: ")
-    kb = KnowledgeBase("bolt://localhost:7686", "neo4j", "Sussy_baka123321")
+    kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
     # kb.delete_all()
     confidence_table = ConfidenceTable(kb)
     nlp = init()

@@ -66,18 +66,16 @@ def test_phrase3(user, nlp, kb):
     assert len(result) == len(output)
     for element in result:
         assert element in output 
-    #lucio, a vcs deu static method is not callable qnd 
-    # Tenta correr o test knowledge base, ele é suposto funfar
-    ## Ok, n era suposto
-    # há algum motivo para o metodo ser static?
+    
+    
 def test_phrase4(user, nlp, kb):
     """ TEST: Diogo's favorite dish is pasta"""
     text = "Diogo's favorite dish is pasta" 
     doc = nlp(text)
     output = [
         # TODO ainda acho que aqui é "Diogo's favorite dish", não "favorite dish" (do jeito que tá definido pelo menos)
-        Triples(ent1=Entity("favorite dish", False), rel="be", ent2=Entity("pasta", False)), # N era "Diogo's favorite dish"? ent pasta é ent1 não? do jeito q tá tá "dish is pasta" ent1 ou ent2 é indiferente, mas neste caso acho que pasta é que vai ser ent2 por causa como está definido o loop
-        Triples(ent1=Entity("Diogo", False), rel="has", ent2=Entity("favorite dish", False)),# também, mas 'pasta is dish' é uma informação, 
+        Triples(ent1=Entity("favorite dish", False), rel="be", ent2=Entity("pasta", False)), 
+        Triples(ent1=Entity("Diogo", False), rel="has", ent2=Entity("favorite dish", False)),
         Triples(ent1=Entity("Diogo favorite dish", False), ent2=Entity("favorite dish", False), rel="Instance")
     ] 
 
@@ -102,3 +100,17 @@ def test_phrase5(user, nlp, kb):
     assert len(result) == len(output)
     for element in result:
         assert element in output 
+
+def test_question1(user, nlp, kb):
+    """ TEST: What does Diogo like? """
+    text = "What does Diogo like?"
+    doc = nlp(text)
+    output = "Diogo", "like"
+    
+    assert False
+
+
+def test_question2(user, nlp, kb):
+    """ TEST: Does Diogo like beans? """
+    
+    assert False
