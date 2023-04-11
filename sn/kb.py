@@ -1,33 +1,72 @@
+from dataclasses import dataclass
 from neo4j import GraphDatabase, ManagedTransaction
 from enum import Enum
-from typing import List, Tuple, TypeVar
+from typing import List, Tuple, Dict
 
-T = TypeVar('T')
+from sn.confidence import ConfidenceTable
+
+class EntityType(Enum):
+    TYPE = "Type"
+    INSTANCE = "Instance"
 
 class RelType(Enum):
-    INSTANCE = "Instance"
-    SUBTYPE = "Subtype"
+    INHERITS = "Inherits"
     OTHER = "Other"
 
 # Decorator for read operations
 def sn_read(read_method):
     def wrapper(self: 'KnowledgeBase', *args, **kwargs):
-        new_args = self.get_enums(args)
         with self.driver.session() as session:
             def include_tx_wrapper(tx, *args, **kwargs):
                 return read_method(*args, **kwargs, tx=tx)
-            return session.execute_read(include_tx_wrapper, *new_args, **kwargs)
+            return session.execute_read(include_tx_wrapper, *args, **kwargs)
     return wrapper
 
 # Decorator for write operations
 def sn_write(write_method):
     def wrapper(self: 'KnowledgeBase', *args, **kwargs):
-        new_args = self.get_enums(args)
         with self.driver.session() as session:
             def include_tx_wrapper(tx, *args, **kwargs):
                 return write_method(*args, **kwargs, tx=tx)
-            return session.execute_write(include_tx_wrapper, *new_args, **kwargs)
+            return session.execute_write(include_tx_wrapper, *args, **kwargs)
     return wrapper
+
+@dataclass(frozen=True)
+class Relation:
+    """Knowledge base relation between two entities.
+    
+    Parameters
+    ----------
+    ent1 : str
+        The first entity of the relation
+    ent1_type : EntityType
+        The type of the first entity
+    ent2 : str
+        The second entity of the relation
+    ent2_type : EntityType
+        The type of the second entity
+    name : str
+        The name of the relation
+    type_ : RelType
+        The type of the relation
+    not_ : bool
+        Whether the relation is negated
+    """
+    
+    ent1:       str
+    ent1_type:  EntityType
+    ent2:       str
+    ent2_type:  EntityType
+    name:       str
+    type_:      RelType
+    not_:       bool        = False
+
+    def inverse(self) -> 'Relation':
+        """Return the inverse of this relation, where the `not_` truth value is swapped."""
+        return Relation(self.ent1, self.ent1_type, self.ent2, self.ent2_type, self.name, self.type_, not self.not_)
+    
+    def __str__(self) -> str:
+        return f"({self.ent1})-[{self.name}]->({self.ent2})"
 
 class KnowledgeBase:
 
@@ -37,14 +76,14 @@ class KnowledgeBase:
     def close(self):
         self.driver.close()
     
-    def get_enums(self, args: Tuple[str|RelType]) -> Tuple[str]:
-        """Given a list of args, convert all `RelType` enums to their corresponding string value."""
-        new_args = list(args)
-        for i, a in enumerate(new_args):
-            if isinstance(a, RelType):
-                new_args[i] = a.value
+    # def get_enums(self, args: Tuple[str|RelType]) -> Tuple[str]:
+    #     """Given a list of args, convert all `RelType` enums to their corresponding string value."""
+    #     new_args = list(args)
+    #     for i, a in enumerate(new_args):
+    #         if isinstance(a, RelType):
+    #             new_args[i] = a.value
         
-        return tuple(new_args)
+    #     return tuple(new_args)
 
     # ------------------------ Query Methods --------------------------
     # Methods for interacting with the knowledge base. Any value passed to the `tx` argument is ignored.
@@ -53,42 +92,64 @@ class KnowledgeBase:
     # greeter.add_knowledge("Lucius", "Diogo", "Cringe", RelType.OTHER, "is")
     
     @sn_write
-    @staticmethod
-    def add_knowledge(declarator:str, ent1:str, ent2:str, relation:str, relation_type:str, tx: ManagedTransaction=None):
-        """`declarator` states that `ent1` has a `relation` with `ent2`.
-        `relation_type` is one of 3 types:
-            - INSTANCE: (Diogo is a Person).
-            - SUBTYPE: (Person is a Mammal).
+    #@staticmethod
+    def add_knowledge(declarator:str, relation: Relation, tx: ManagedTransaction=None):
+        """`declarator` states that `relation.ent1` has a `relation.name` with `relation.ent2`.
+        `relation.type_` is one of 2 types:
+            - INHERITS: (Diogo is a Person).
             - OTHER: Literally any other relation.
             
         Use `RelType` enum to specify which one.
         
-        `relation` is the name given to the relation, and is only relevant with the OTHER relation type.
+        `relation.name` is the name given to the relation, and is only relevant with the OTHER relation type.
         """
+        
+        if relation.type_.INHERITS and relation.ent2_type != EntityType.TYPE:
+            raise ValueError("Can only inherit from types entities.")
 
-        result = tx.run(f"MERGE (e1:{ent1.replace(' ', '')} {{name: $ent1}}) "
-                        f"MERGE (e2:{ent2.replace(' ', '')} {{name: $ent2}}) "
-                        f"MERGE (e1)-[r:{relation_type} {{declarator: $declarator, name: $relation}}]->(e2) "
-                        "RETURN e1.name", declarator=declarator, ent1=ent1, ent2=ent2, relation_type=relation_type, relation=relation)
+        new_ent1 = f"n_{relation.ent1}" if relation.ent1.isdigit() else relation.ent1 
+        new_ent2 = f"n_{relation.ent2}" if relation.ent2.isdigit() else relation.ent2
+
+        result = tx.run(f"MERGE (e1:{relation.ent1_type.value} {{name: $ent1}}) "
+                        f"MERGE (e2:{relation.ent2_type.value} {{name: $ent2}}) "
+                        f"MERGE (e1)-[r:{relation.type_.value} {{declarator: $declarator, name: $relation, not: $not_}}]->(e2) "
+                        "RETURN e1.name", declarator=declarator, ent1=new_ent1, ent2=new_ent2, relation=relation.name, not_=relation.not_)
         
         return result.single()[0]
     
     @sn_read
     @staticmethod
-    def query_declarations(declarator:str, tx: ManagedTransaction=None) -> List[Tuple[str, str, str]]:
-        """Query an declarator to obtain all declarations made by it.
-        Output: `[(entity1, relation_name, entity2), (...)]`
+    def query_declarations(declarator:str, tx: ManagedTransaction=None) -> List[Relation]:
+        """Query a declarator to obtain all declarations made by it.
+        Output: `[relation1, relation2, (...)]`
         """
         results = tx.run("MATCH (e1)-[r {declarator: $declarator}]->(e2) "
-                        "RETURN e1.name as ent1, r.name as relation, e2.name as ent2", declarator=declarator)
+                        "RETURN e1.name AS ent1, labels(e1)[0] AS ent1_type, type(r) AS relation_type, r.name AS relation, e2.name AS ent2, labels(e2)[0] AS ent2_type, r.not AS not", declarator=declarator)
         
-        return [(result.ent1, result.relation, result.ent2) for result in results]
+        return [Relation(
+            ent1=result.value("ent1"),
+            ent1_type=EntityType(result.value("ent1_type")),
+            ent2=result.value("ent2"),
+            ent2_type=EntityType(result.value("ent2_type")),
+            name=result.value("relation"),
+            type_=result.value("relation_type"),
+            not_=result.value("not")
+        ) for result in results]
 
     @sn_read
     @staticmethod
-    def query_local(ent:str, tx: ManagedTransaction=None) -> List[Tuple[str, str, List[str]]]:
+    def query_declarators(relation: Relation, tx: ManagedTransaction=None) -> List[str]:
+        """Obtain all declarators that declared the given relation."""
+        results = tx.run(f"MATCH (e1:{relation.ent1_type} {{name: $ent1}})-[r:{relation.type_.value} {{name: $relation, not: $not_}}]->(e2{relation.ent2_type} {{name: $ent2}}) "
+                        "RETURN r.declarator AS declarator", ent1=relation.ent1, relation=relation.name, ent2=relation.ent2, not_=relation.not_)
+        
+        return [result.value("declarator") for result in results]
+
+    @sn_read
+    @staticmethod
+    def query_local(ent:str, tx: ManagedTransaction=None) -> List[Tuple[Tuple[str, str], List[str]]]:
         """Query an entity to obtain the relations and its entities.
-        Output: `[(relation_name, [entity1, entity2]), (...)]`
+        Output: `[((relation_name, relation_type), [entity2, entity3]), (...)]`
         """
         
         results = tx.run("MATCH (eIn {name: $entIn})-[r]->(eOut)"
@@ -107,18 +168,18 @@ class KnowledgeBase:
 
     @sn_read
     @staticmethod
-    def query_local_relation(ent:str, relation:str, relation_type:str, tx: ManagedTransaction=None) -> List[str]:
+    def query_local_relation(ent:str, relation:str, relation_type:RelType, tx: ManagedTransaction=None) -> List[str]:
         """Query an entity to obtain the entities of a specific relation."""
         
-        results = tx.run(f"MATCH (e {{name: $ent}})-[r:{relation_type} {{name: $relation}}]->(e2) "
-                        "RETURN e2.name as entity", ent=ent, relation=relation)
+        results = tx.run(f"MATCH (e {{name: $ent}})-[r:{relation_type.value} {{name: $relation}}]->(e2) "
+                        "RETURN e2.name AS entity", ent=ent, relation=relation)
         
         return [result.value("entity") for result in results]
         
     @sn_read
     @staticmethod
-    def query_inheritance(ent:str, tx: ManagedTransaction=None) -> List[Tuple[str, List[str]]]:
-        """Query all local attributes of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations"""
+    def query_inheritance(ent:str, tx: ManagedTransaction=None) -> Dict[str, Tuple[List[str], int]]:
+        """Query all local attributes of an entity as well as attributes inherited from INHERITS relations"""
         
         # logicks: query_local for ent + query_inheritance for ascendants
         
@@ -131,25 +192,33 @@ class KnowledgeBase:
         results = tx.run(
             f"MATCH (ent1 {{name:$ent}}) "
             "MATCH (ent1)-[r]->(ent2) "
-            "RETURN ent1 as ent, collect(r), collect(ent2)"
+            "RETURN ent1.name AS subject, collect(ent2.name) AS characteristics, 0 AS distance "
             "UNION "
-            f"MATCH (ent1 {{name:$ent}})-[:{RelType.INSTANCE.value}|{RelType.SUBTYPE.value} *1..]->(ascn) "
+            f"MATCH p = (ent1 {{name:$ent}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
             "MATCH (ascn)-[r]->(ent2) "
-            "RETURN ascn as ent, collect(r), collect(ent2)", ent=ent
+            "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, length(p) AS distance", ent=ent
         )
         
-        # TODO: process results into final return val
-
-
-        return list(results)
+        return {result.value('subject'):(result.value('characteristics'), result.value('distance')) for result in results}
 
     @sn_read
     @staticmethod
-    def query_inheritance_relation(ent:str, relation:str, relation_type:str, tx: ManagedTransaction=None) -> List[str]:
-        """Query the specified attribute of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations"""
-        # Unary values would be used in a shortest path context. ig
-        raise NotImplementedError()
-    
+    def query_inheritance_relation(ent:str, relation:str, tx: ManagedTransaction=None) ->  Dict[str, Tuple[List[str], int]]:
+        """Query the specified attribute of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations.
+        The output is each Entity in the key, the characteristics and distance as the tuple elements"""
+        
+        results = tx.run(
+            f"MATCH (ent1 {{name:$ent}}) "
+            "MATCH (ent1)-[r {name:$relation}]->(ent2) "
+            "RETURN ent1.name AS subject, collect(ent2.name) AS characteristics, 0 AS distance "
+            "UNION "
+            f"MATCH p = (ent1 {{name:$ent}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
+            "MATCH (ascn)-[r {name:$relation}]->(ent2) "
+            "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, length(p) AS distance", ent=ent, relation=relation
+        )
+        
+        return {result.value('subject'):(result.value('characteristics'), result.value('distance')) for result in results}
+        
     @sn_read
     @staticmethod
     def query_descendants(ent:str, tx: ManagedTransaction=None) -> List[Tuple[str, str, List[str]]]:
@@ -159,10 +228,10 @@ class KnowledgeBase:
 
     @sn_read
     @staticmethod
-    def query_descendants_relation(ent:str, relation:str, relation_type:str, tx: ManagedTransaction=None) -> List[str]:
+    def query_descendants_relation(ent:str, relation:str, relation_type:RelType, tx: ManagedTransaction=None) -> List[str]:
         """Query the specified *local* attribute of entity descendants"""
         
-        results = tx.run(f"MATCH (eOut)<-[:{relation_type} {{name: $relation}}]-(desc)-[r:{RelType.INSTANCE.value}|{RelType.SUBTYPE.value} *1..]->(eIn {{name: $entIn}}) "
+        results = tx.run(f"MATCH (eOut)<-[:{relation_type.value} {{name: $relation}}]-(desc)-[r:{RelType.INHERITS.value} *1..]->(eIn {{name: $entIn}}) "
                         "RETURN eOut.name AS other_entity", relation=relation, entIn=ent)
 
         return [result.value("other_entity") for result in results]
@@ -175,41 +244,50 @@ class KnowledgeBase:
         return result.single()
     
 
-    # # nice >:]
+    # # # nice >:]
 
 
 
 
 if __name__ == "__main__":
-    driver = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321") # Security just sent a hug :)
-    driver.delete_all() # Don't have memory between run tests
+    kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321") # Security just sent a hug :)
+    kb.delete_all() # Don't have memory between run tests
     
-    driver.add_knowledge("Lucius", "Diogo", "Cringe", "is", RelType.OTHER)
-    driver.add_knowledge("Lucius", "Diogo", "Person", "is" , RelType.INSTANCE)
-    driver.add_knowledge("Lucius", "Diogo", "Working", "is", RelType.OTHER)
-    driver.add_knowledge("Diogo", "Lucius", "Bad Declarator", "is", RelType.OTHER)
-    driver.add_knowledge("Diogo", "Lucius", "Mushrooms", "likes", RelType.OTHER)
-    driver.add_knowledge("Diogo", "Lucius", "Shotos", "likes", RelType.OTHER)
-    driver.add_knowledge("Martinho", "Person", "Mammal", "is", RelType.SUBTYPE)
-    driver.add_knowledge("Lucius", "Mammal", "Animal", "is", RelType.SUBTYPE)
+    kb.add_knowledge("Lucius", Relation("Diogo", EntityType.INSTANCE, "cringe", EntityType.TYPE, "is", RelType.OTHER))
+    kb.add_knowledge("Lucius", Relation("Diogo", EntityType.INSTANCE, "person", EntityType.TYPE, "is" , RelType.INHERITS))
+    kb.add_knowledge("Lucius", Relation("Diogo", EntityType.INSTANCE, "working", EntityType.TYPE, "is", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("Lucius", EntityType.INSTANCE, "bad declarator", EntityType.TYPE, "is", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("Lucius", EntityType.INSTANCE, "mushrooms", EntityType.TYPE, "likes", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("Lucius", EntityType.INSTANCE, "shotos", EntityType.TYPE, "likes", RelType.OTHER))
+    kb.add_knowledge("Martinho", Relation("Person", EntityType.TYPE, "mammal", EntityType.TYPE, "is", RelType.INHERITS))
+    kb.add_knowledge("Lucius", Relation("Mammal", EntityType.TYPE, "animal", EntityType.TYPE, "is", RelType.INHERITS))
+    kb.add_knowledge("Martinho", Relation("Diogo", EntityType.INSTANCE, "cringe", EntityType.TYPE, "is", RelType.OTHER, not_=True))
     
 
-    driver.add_knowledge("Diogo", "Person", "Food", "eats", RelType.OTHER)
-    driver.add_knowledge("Diogo", "Person", "Beans", "eats", RelType.OTHER)
-    driver.add_knowledge("Diogo", "Diogo", "Chips", "eats", RelType.OTHER)
-    driver.add_knowledge("Lucius", "Mammal", "Banana", "eats", RelType.OTHER)
-    driver.add_knowledge("Lucius", "Animal", "Water", "drinks", RelType.OTHER)
+    kb.add_knowledge("Diogo", Relation("Person", EntityType.TYPE, "food", EntityType.TYPE, "eats", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("Person", EntityType.TYPE, "beans", EntityType.TYPE, "eats", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("Diogo", EntityType.INSTANCE, "chips", EntityType.TYPE, "eats", RelType.OTHER))
+    kb.add_knowledge("Lucius", Relation("Mammal", EntityType.TYPE, "banana", EntityType.TYPE, "eats", RelType.OTHER))
+    kb.add_knowledge("Lucius", Relation("Animal", EntityType.TYPE, "water", EntityType.TYPE, "drinks", RelType.OTHER))
 
     
     
     # ------------- DEBUG ZONE ------------
-    print(driver.query_declarations("Lucius"))
-    print(driver.query_local("Diogo"))   # [(('is', 'Other'), ['Cringe', 'Working']), (('is', 'Instance'), ['Person']), (('eats', 'Other'), ['Chips'])]
-    print(driver.query_local_relation("Diogo", "is", RelType.OTHER))   # ['Working', 'Cringe']
-    print(driver.query_inheritance("Diogo"))
-    print(driver.query_descendants_relation("Mammal", "eats", RelType.OTHER))   # ['Beans', 'Food', 'Chips']
+    print(kb.query_declarations("Lucius"))
+    print(kb.query_local("Diogo"))   # [(('is', 'Other'), ['Cringe', 'Working']), (('is', 'Instance'), ['Person']), (('eats', 'Other'), ['Chips'])]
+    print(kb.query_local_relation("Diogo", "is", RelType.OTHER))   # ['Working', 'Cringe']
+    print(kb.query_inheritance("Diogo"))
+    print(kb.query_descendants_relation("Mammal", "eats", RelType.OTHER))   # ['Beans', 'Food', 'Chips']
     
-    driver.close()
+    confidence_table = ConfidenceTable(kb)
+    confidence_table.register_declarator("Lucius")
+    confidence_table.register_declarator("Diogo")
+    confidence_table.register_declarator("Martinho")
+    confidence_table.update_confidences()
+    print('Confidence of (Diogo)-[is]->(Cringe):', confidence_table.get_relation_confidence(Relation("Diogo", "Cringe", "is", RelType.OTHER)))   # 0.4947916666666667
+    print('Confidence table:', confidence_table._confidences)
+
+    kb.close()
     
     # [<Record e1.name + ' ' + r.name + ' ' + e2.name='Diogo is Cringe'>, <Record e1.name + ' ' + r.name + ' ' + e2.name='Diogo is Person'>, <Record e1.name + ' ' + r.name + ' ' + e2.name='Diogo is Working'>]
     # [(('is', 'Other'), ['Cringe', 'Working']), (('is', 'Instance'), ['Person'])]

@@ -1,2 +1,3 @@
 spacy
-neo4js
+neo4j
+pytest
