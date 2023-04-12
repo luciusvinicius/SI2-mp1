@@ -138,7 +138,7 @@ class KnowledgeBase:
     @staticmethod
     def query_declarators(relation: Relation, tx: ManagedTransaction=None) -> List[str]:
         """Obtain all declarators that declared the given relation."""
-        results = tx.run(f"MATCH (e1:{relation.ent1_type} {{name: $ent1}})-[r:{relation.type_.value} {{name: $relation, not: $not_}}]->(e2{relation.ent2_type} {{name: $ent2}}) "
+        results = tx.run(f"MATCH (e1:{relation.ent1_type.value} {{name: $ent1}})-[r:{relation.type_.value} {{name: $relation, not: $not_}}]->(e2{relation.ent2_type.value} {{name: $ent2}}) "
                         "RETURN r.declarator AS declarator", ent1=relation.ent1, relation=relation.name, ent2=relation.ent2, not_=relation.not_)
         
         return [result.value("declarator") for result in results]
