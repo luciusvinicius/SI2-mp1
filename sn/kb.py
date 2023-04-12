@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from neo4j import GraphDatabase, ManagedTransaction
 from enum import Enum
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Union
 
 from sn.confidence import ConfidenceTable
+
 
 class EntityType(Enum):
     TYPE = "Type"
@@ -54,11 +55,11 @@ class Relation:
     """
     
     ent1:       str
-    ent1_type:  EntityType | None
+    ent1_type:  Union[EntityType, None]
     ent2:       str
-    ent2_type:  EntityType | None
+    ent2_type:  Union[EntityType, None]
     name:       str
-    type_:      RelType | None
+    type_:      Union[RelType, None]
     not_:       bool                = False
 
     def inverse(self) -> 'Relation':

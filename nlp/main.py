@@ -173,10 +173,10 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     for child in reversed(list(nsubject.children)):
         print(f"{child} {child.pos_} {child.dep_}")
         if child.dep_ == "poss":
-            ent1 = copy(entity1).prefix(child)
-            rel = "Instance"
             ent2 = copy(entity1)
-            triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
+            entity1 = entity1.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
+            rel = "Instance"
+            triplet = Triples(ent1=entity1, ent2=ent2, rel=rel)
             knowledge.append(triplet)
 
             ent1 = Entity(child)
@@ -192,14 +192,14 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     for child in reversed(list(nobj.children)):
         print(f"{child} {child.pos_} {child.dep_}")
         if child.dep_ == "poss":
-            ent1 = copy(entity2).prefix(child)
-            rel = "Instance"
             ent2 = copy(entity2)
-            triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
+            entity2 = entity2.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
+            rel = "Instance"
+            triplet = Triples(ent1=entity2, ent2=ent2, rel=rel)
             knowledge.append(triplet)
 
             ent1 = Entity(child)
-            ent2 = entity2.prefix(child)
+            ent2 = entity2#.prefix(child)
             rel = "has"
             triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
             knowledge.append(triplet)
