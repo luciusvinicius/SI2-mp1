@@ -29,6 +29,10 @@ class Entity:
     def sufix(self, val):
         self.name = f"{self.name} {val}"
         return self
+    
+    def append(self, val):
+        self.name = f"{self.name}{val}"
+        return self
 
     def __repr__(self) -> str:
         return self.name
