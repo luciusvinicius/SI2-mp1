@@ -46,9 +46,11 @@ def data_disagreements(initialize_knowledge_base):
     kb.add_knowledge("Lucius", relations_with_inverses[3])
     kb.add_knowledge("Diogo", relations_with_inverses[3])
     
-    return kb, relations_with_inverses
+    yield kb, relations_with_inverses
 
-def test_confidence_of_relation_is_complement_of_inverse_relation(data_disagreements, confidence_table):
+    kb.delete_all()
+
+def test_confidence_of_relation_inverses_depends_on_number_of_declarators(data_disagreements, confidence_table):
     """Confidence of relation X `cX` is equal to 1 - `~cX`, the confidence of relation ~X"""
 
     kb, relations_with_inverses = data_disagreements
@@ -61,10 +63,17 @@ def test_confidence_of_relation_is_complement_of_inverse_relation(data_disagreem
         ct.register_declarator(declarator)
     ct.update_confidences()
 
-    assert all(
-        ct.get_relation_confidence(relation) == 1 - ct.get_relation_confidence(relation.inverse())
-        for relation in relations_with_inverses
-    )
+    for relation in relations_with_inverses:
+        relation_confidence = ct.get_relation_confidence(relation)
+        relation_inverse_confidence = ct.get_relation_confidence(relation.inverse())
+
+        n_declarators = len(kb.query_declarators(relation))
+        n_declarators_inverse = len(kb.query_declarators(relation.inverse()))
+
+        if n_declarators < n_declarators_inverse:
+            assert relation_confidence < relation_inverse_confidence
+        else:
+            assert relation_confidence > relation_inverse_confidence
 
 def test_confidence_of_bare_non_static_disagreement_at_half(initialize_knowledge_base, confidence_table):
     """Confidence of disagreement between two relations should be at half, if no other relations are present in the knowledge base"""
