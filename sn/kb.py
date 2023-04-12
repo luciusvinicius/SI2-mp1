@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from neo4j import GraphDatabase, ManagedTransaction
 from enum import Enum
-from typing import List, Tuple, Dict
+from typing import List, Set, Tuple, Dict
 
 from sn.confidence import ConfidenceTable
 
@@ -116,14 +116,14 @@ class KnowledgeBase:
     
     @sn_read
     @staticmethod
-    def query_declarations(declarator:str, tx: ManagedTransaction=None) -> List[Relation]:
+    def query_declarations(declarator:str, tx: ManagedTransaction=None) -> Set[Relation]:
         """Query a declarator to obtain all declarations made by it.
         Output: `[relation1, relation2, (...)]`
         """
         results = tx.run("MATCH (e1)-[r {declarator: $declarator}]->(e2) "
                         "RETURN e1.name AS ent1, labels(e1)[0] AS ent1_type, type(r) AS relation_type, r.name AS relation, e2.name AS ent2, labels(e2)[0] AS ent2_type, r.not AS not", declarator=declarator)
         
-        return [Relation(
+        return {Relation(
             ent1=result.value("ent1"),
             ent1_type=EntityType(result.value("ent1_type")),
             ent2=result.value("ent2"),
@@ -131,20 +131,20 @@ class KnowledgeBase:
             name=result.value("relation"),
             type_=result.value("relation_type"),
             not_=result.value("not")
-        ) for result in results]
+        ) for result in results}
 
     @sn_read
     @staticmethod
-    def query_declarators(relation: Relation, tx: ManagedTransaction=None) -> List[str]:
+    def query_declarators(relation: Relation, tx: ManagedTransaction=None) -> Set[str]:
         """Obtain all declarators that declared the given relation."""
         results = tx.run(f"MATCH (e1:{relation.ent1_type.value} {{name: $ent1}})-[r:{relation.type_.value} {{name: $relation, not: $not_}}]->(e2{relation.ent2_type.value} {{name: $ent2}}) "
                         "RETURN r.declarator AS declarator", ent1=relation.ent1, relation=relation.name, ent2=relation.ent2, not_=relation.not_)
         
-        return [result.value("declarator") for result in results]
+        return {result.value("declarator") for result in results}
 
     @sn_read
     @staticmethod
-    def query_local(ent:str, tx: ManagedTransaction=None) -> List[Tuple[Tuple[str, str], List[str]]]:
+    def query_local(ent:str, tx: ManagedTransaction=None) -> Set[Tuple[Tuple[str, str], Set[str]]]:
         """Query an entity to obtain the relations and its entities.
         Output: `[((relation_name, relation_type), [entity2, entity3]), (...)]`
         """
@@ -158,24 +158,26 @@ class KnowledgeBase:
             relation_type = result.value("relation_type")
             other_entity = result.value("other_entity")
 
-            result_dict.setdefault((relation, relation_type), [])
-            result_dict[relation, relation_type].append(other_entity)
+            result_dict.setdefault((relation, relation_type), set())
+            result_dict[relation, relation_type].add(other_entity)
 
-        return list(result_dict.items())
+        result_dict = {k:frozenset(v) for k, v in result_dict.items()}
+
+        return set(result_dict.items())
 
     @sn_read
     @staticmethod
-    def query_local_relation(ent:str, relation:str, relation_type:RelType, tx: ManagedTransaction=None) -> List[str]:
+    def query_local_relation(ent:str, relation:str, relation_type:RelType, tx: ManagedTransaction=None) -> Set[str]:
         """Query an entity to obtain the entities of a specific relation."""
         
         results = tx.run(f"MATCH (e {{name: $ent}})-[r:{relation_type.value} {{name: $relation}}]->(e2) "
                         "RETURN e2.name AS entity", ent=ent, relation=relation)
         
-        return [result.value("entity") for result in results]
+        return {result.value("entity") for result in results}
         
     @sn_read
     @staticmethod
-    def query_inheritance(ent:str, tx: ManagedTransaction=None) -> Dict[str, Tuple[List[str], int]]:
+    def query_inheritance(ent:str, tx: ManagedTransaction=None) -> Dict[str, Tuple[Set[str], int]]:
         """Query all local attributes of an entity as well as attributes inherited from INHERITS relations"""
         
         # logicks: query_local for ent + query_inheritance for ascendants
@@ -196,11 +198,11 @@ class KnowledgeBase:
             "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, length(p) AS distance", ent=ent
         )
         
-        return {result.value('subject'):(result.value('characteristics'), result.value('distance')) for result in results}
+        return {result.value('subject'):(frozenset(result.value('characteristics')), result.value('distance')) for result in results}
 
     @sn_read
     @staticmethod
-    def query_inheritance_relation(ent:str, relation:str, tx: ManagedTransaction=None) ->  Dict[str, Tuple[List[str], int]]:
+    def query_inheritance_relation(ent:str, relation:str, tx: ManagedTransaction=None) ->  Dict[str, Tuple[Set[str], int]]:
         """Query the specified attribute of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations.
         The output is each Entity in the key, the characteristics and distance as the tuple elements"""
         
@@ -214,24 +216,24 @@ class KnowledgeBase:
             "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, length(p) AS distance", ent=ent, relation=relation
         )
         
-        return {result.value('subject'):(result.value('characteristics'), result.value('distance')) for result in results}
+        return {result.value('subject'):(frozenset(result.value('characteristics')), result.value('distance')) for result in results}
         
-    @sn_read
-    @staticmethod
-    def query_descendants(ent:str, tx: ManagedTransaction=None) -> List[Tuple[str, str, List[str]]]:
-        """Query all attributes of entity descendants"""
-        # this sounds like a bad idea maybe
-        raise NotImplementedError()
+    # @sn_read
+    # @staticmethod
+    # def query_descendants(ent:str, tx: ManagedTransaction=None) -> Set[Tuple[str, str, Set[str]]]:
+    #     """Query all attributes of entity descendants"""
+    #     # this sounds like a bad idea maybe
+    #     raise NotImplementedError()
 
     @sn_read
     @staticmethod
-    def query_descendants_relation(ent:str, relation:str, relation_type:RelType, tx: ManagedTransaction=None) -> List[str]:
+    def query_descendants_relation(ent:str, relation:str, relation_type:RelType, tx: ManagedTransaction=None) -> Set[str]:
         """Query the specified *local* attribute of entity descendants"""
         
         results = tx.run(f"MATCH (eOut)<-[:{relation_type.value} {{name: $relation}}]-(desc)-[r:{RelType.INHERITS.value} *1..]->(eIn {{name: $entIn}}) "
                         "RETURN eOut.name AS other_entity", relation=relation, entIn=ent)
 
-        return [result.value("other_entity") for result in results]
+        return {result.value("other_entity") for result in results}
 
     @sn_read
     @staticmethod
@@ -260,12 +262,12 @@ class KnowledgeBase:
 
     @sn_read
     @staticmethod
-    def get_all_declarators(tx: ManagedTransaction=None) -> List[str]:
+    def get_all_declarators(tx: ManagedTransaction=None) -> Set[str]:
         """Get all unique declarators of knowledge."""
 
         results = tx.run(f"MATCH ()-[r]->() RETURN DISTINCT r.declarator AS declarator")
 
-        return [result.value("declarator") for result in results]
+        return {result.value("declarator") for result in results}
 
     @sn_write
     @staticmethod
@@ -275,14 +277,14 @@ class KnowledgeBase:
         return result.single()
     
 
-    # # # nice >:]
+    # # # # nice >:]
 
 
 
 
 if __name__ == "__main__":
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321") # Security just sent a hug :)
-    kb.delete_all() # Don't have memory between run tests
+    kb.delete_all() # Clear all data, to have a clean testing sandbox
     
     kb.add_knowledge("Lucius", Relation("Diogo", EntityType.INSTANCE, "cringe", EntityType.TYPE, "is", RelType.OTHER))
     kb.add_knowledge("Lucius", Relation("Diogo", EntityType.INSTANCE, "person", EntityType.TYPE, "is" , RelType.INHERITS))
@@ -294,41 +296,10 @@ if __name__ == "__main__":
     kb.add_knowledge("Lucius", Relation("Mammal", EntityType.TYPE, "animal", EntityType.TYPE, "is", RelType.INHERITS))
     kb.add_knowledge("Martinho", Relation("Diogo", EntityType.INSTANCE, "cringe", EntityType.TYPE, "is", RelType.OTHER, not_=True))
     
-
     kb.add_knowledge("Diogo", Relation("Person", EntityType.TYPE, "food", EntityType.TYPE, "eats", RelType.OTHER))
     kb.add_knowledge("Diogo", Relation("Person", EntityType.TYPE, "beans", EntityType.TYPE, "eats", RelType.OTHER))
     kb.add_knowledge("Diogo", Relation("Diogo", EntityType.INSTANCE, "chips", EntityType.TYPE, "eats", RelType.OTHER))
     kb.add_knowledge("Lucius", Relation("Mammal", EntityType.TYPE, "banana", EntityType.TYPE, "eats", RelType.OTHER))
     kb.add_knowledge("Lucius", Relation("Animal", EntityType.TYPE, "water", EntityType.TYPE, "drinks", RelType.OTHER))
 
-    
-    
-    # ------------- DEBUG ZONE ------------
-    print(kb.query_declarations("Lucius"))
-    print(kb.query_local("Diogo"))   # [(('is', 'Other'), ['Cringe', 'Working']), (('is', 'Instance'), ['Person']), (('eats', 'Other'), ['Chips'])]
-    print(kb.query_local_relation("Diogo", "is", RelType.OTHER))   # ['Working', 'Cringe']
-    print(kb.query_inheritance("Diogo"))
-    print(kb.query_descendants_relation("Mammal", "eats", RelType.OTHER))   # ['Beans', 'Food', 'Chips']
-    
-    confidence_table = ConfidenceTable(kb)
-    confidence_table.register_declarator("Lucius")
-    confidence_table.register_declarator("Diogo")
-    confidence_table.register_declarator("Martinho")
-    confidence_table.update_confidences()
-    print('Confidence of (Diogo)-[is]->(Cringe):', confidence_table.get_relation_confidence(Relation("Diogo", "Cringe", "is", RelType.OTHER)))   # 0.4947916666666667
-    print('Confidence table:', confidence_table._confidences)
-
     kb.close()
-    
-    # [<Record e1.name + ' ' + r.name + ' ' + e2.name='Diogo is Cringe'>, <Record e1.name + ' ' + r.name + ' ' + e2.name='Diogo is Person'>, <Record e1.name + ' ' + r.name + ' ' + e2.name='Diogo is Working'>]
-    # [(('is', 'Other'), ['Cringe', 'Working']), (('is', 'Instance'), ['Person'])]
-    # ['Working', 'Cringe']
-    
-    
-
-    # neo4j.exceptions.CypherSyntaxError: {code: Neo.ClientError.Statement.SyntaxError} {message: All sub queries in an UNION must have the same return column names (line 1, column 105 (offset: 104))
-    # "MATCH (ent1 {name:$ent})-[:Instance|Subtype *1..]->(ascn) MATCH (ent1)-[r]->(ent2) RETURN ent1, r, ent2 UNION MATCH (ascn)-[r]->(ent2) RETURN ascn, r, ent2" 
-    
-    # [<Record ent=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:0' labels=frozenset({'Diogo'}) properties={'name': 'Diogo'}> r=<Relationship element_id='5:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:4' nodes=(<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:0' labels=frozenset({'Diogo'}) properties={'name': 'Diogo'}>, <Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:2' labels=frozenset({'Cringe'}) properties={'name': 'Cringe'}>) type='Other' properties={'name': 'is', 'declarator': 'Lucius'}> ent2=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:2' labels=frozenset({'Cringe'}) properties={'name': 'Cringe'}>>, <Record ent=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:0' labels=frozenset({'Diogo'}) properties={'name': 'Diogo'}> r=<Relationship element_id='5:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:5' nodes=(<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:0' labels=frozenset({'Diogo'}) properties={'name': 'Diogo'}>, <Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:3' labels=frozenset({'Person'}) properties={'name': 'Person'}>) type='Instance' properties={'name': 'is', 'declarator': 'Lucius'}> ent2=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:3' labels=frozenset({'Person'}) properties={'name': 'Person'}>>, <Record ent=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:0' labels=frozenset({'Diogo'}) properties={'name': 'Diogo'}> r=<Relationship element_id='5:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:6' nodes=(<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:0' labels=frozenset({'Diogo'}) properties={'name': 'Diogo'}>, <Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:9' labels=frozenset({'Working'}) properties={'name': 'Working'}>) type='Other' properties={'name': 'is', 'declarator': 'Lucius'}> ent2=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:9' labels=frozenset({'Working'}) properties={'name': 'Working'}>>, <Record ent=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:0' labels=frozenset({'Diogo'}) properties={'name': 'Diogo'}> r=<Relationship element_id='5:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:15' nodes=(<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:0' labels=frozenset({'Diogo'}) properties={'name': 'Diogo'}>, <Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:19' labels=frozenset({'Chips'}) properties={'name': 'Chips'}>) type='Other' properties={'name': 'eats', 'declarator': 'Diogo'}> ent2=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:19' labels=frozenset({'Chips'}) properties={'name': 'Chips'}>>, <Record ent=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:10' labels=frozenset({'Lucius'}) properties={'name': 'Lucius'}> r=<Relationship element_id='5:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:7' nodes=(<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:10' labels=frozenset({'Lucius'}) properties={'name': 'Lucius'}>, <Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:11' labels=frozenset({'BadDeclarator'}) properties={'name': 'Bad Declarator'}>) type='Other' properties={'name': 'is', 'declarator': 'Diogo'}> ent2=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:11' labels=frozenset({'BadDeclarator'}) properties={'name': 'Bad Declarator'}>>, <Record ent=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:10' labels=frozenset({'Lucius'}) properties={'name': 'Lucius'}> r=<Relationship element_id='5:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:11' nodes=(<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:10' labels=frozenset({'Lucius'}) properties={'name': 'Lucius'}>, <Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:15' labels=frozenset({'Mushrooms'}) properties={'name': 'Mushrooms'}>) type='Other' properties={'name': 'likes', 'declarator': 'Diogo'}> ent2=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:15' labels=frozenset({'Mushrooms'}) properties={'name': 'Mushrooms'}>>, <Record ent=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:10' labels=frozenset({'Lucius'}) properties={'name': 'Lucius'}> r=<Relationship element_id='5:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:12' nodes=(<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:10' labels=frozenset({'Lucius'}) properties={'name': 'Lucius'}>, <Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:16' labels=frozenset({'Shotos'}) properties={'name': 'Shotos'}>) type='Other' properties={'name': 'likes', 'declarator': 'Diogo'}> ent2=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:16' labels=frozenset({'Shotos'}) properties={'name': 'Shotos'}>>, <Record ent=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:3' labels=frozenset({'Person'}) properties={'name': 'Person'}> r=<Relationship element_id='5:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:13' nodes=(<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:3' labels=frozenset({'Person'}) properties={'name': 'Person'}>, <Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:17' labels=frozenset({'Mammal'}) properties={'name': 'Mammal'}>) type='Subtype' properties={'name': 'is', 'declarator': 'Martinho'}> ent2=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:17' labels=frozenset({'Mammal'}) properties={'name': 'Mammal'}>>, <Record ent=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:3' labels=frozenset({'Person'}) properties={'name': 'Person'}> r=<Relationship element_id='5:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:14' nodes=(<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:3' labels=frozenset({'Person'}) properties={'name': 'Person'}>, <Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:18' labels=frozenset({'Food'}) properties={'name': 'Food'}>) type='Other' properties={'name': 'eats', 'declarator': 'Diogo'}> ent2=<Node element_id='4:fa1d321e-d5e1-47f7-a1b4-bd75aa5605e3:18' labels=frozenset({'Food'}) properties={'name': 'Food'}>>]
-    
-    

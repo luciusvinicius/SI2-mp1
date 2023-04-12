@@ -42,14 +42,44 @@ def test_diogo_eats(example_data):
     kb: KnowledgeBase = example_data
     
     output = {
-        "Diogo": (["chips"], 0),
-        "person": (sorted(["food", "beans"]), 1), # TODO: Food order is random. Maybe order in the query?
-        "mammal": (["banana"], 2),
-        
+        "Diogo": ({"chips"}, 0),
+        "person": ({"food", "beans"}, 1),
+        "mammal": ({"banana"}, 2),
     }
 
     kb_output = kb.query_inheritance_relation("Diogo", "eats")
-    for value in kb_output.values():
-        value[0].sort()
+
+    assert kb_output == output
+
+
+def test_query_local(example_data):
+
+    kb: KnowledgeBase = example_data
+
+    output = {(("is", "Other"), frozenset({"cringe", "working"})), (("is", "Inherits"), frozenset({"person"})), (("eats", "Other"), frozenset({"chips"}))}
+
+    kb_output = kb.query_local("Diogo")
+
+    assert kb_output == output
+
+
+def test_query_local_relation(example_data):
+
+    kb: KnowledgeBase = example_data
+
+    output = {"working", "cringe"}
+
+    kb_output = kb.query_local_relation("Diogo", "is", RelType.OTHER)
+
+    assert kb_output == output
+
+
+def test_query_descendants_relation(example_data):
+
+    kb: KnowledgeBase = example_data
+
+    output = {"beans", "food", "chips"}
+
+    kb_output = kb.query_descendants_relation("mammal", "eats", RelType.OTHER)
 
     assert kb_output == output
