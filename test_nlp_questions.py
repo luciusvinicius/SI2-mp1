@@ -56,7 +56,7 @@ def test_question1(user, nlp, data1):
     """ TEST: What does Diogo like? """
     text = "What does Diogo like?"
     doc = nlp(text)
-    output = ("Diogo", "like", {'Diogo': (['shotos', 'beans'], 0)})
+    output = ("Diogo", "like", {'Diogo': ({'shotos', 'beans'}, 0)})
     
     kb = data1
     
