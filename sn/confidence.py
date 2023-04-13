@@ -72,6 +72,9 @@ class ConfidenceTable:
         is different in separate calls to this function, in which case the declarator's associated
         confidence value is updated in each call.
 
+        If a registered non-static declarator is then registered as static, then it switch from non-
+        static to static, and vice-versa.
+
         Parameters
         ----------
         declarator : str
@@ -83,11 +86,15 @@ class ConfidenceTable:
 
         # Registered static declarator
         if static_confidence is not None:
+            if declarator in self._non_static_declarators:
+                self._non_static_declarators.remove(declarator)
             self._confidences[declarator] = static_confidence
             self._static_declarators.add(declarator)
         
         # Registered non-static declarator
         else:
+            if declarator in self._static_declarators:
+                self._static_declarators.remove(declarator)
             self._confidences[declarator] = self._base_confidence
             self._non_static_declarators.add(declarator)
 
