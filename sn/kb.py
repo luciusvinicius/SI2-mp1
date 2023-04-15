@@ -51,14 +51,18 @@ class Relation:
     not_ : bool
         Whether the relation is negated
     """
-    
+
     ent1:       str
     ent1_type:  Union[EntityType, None]
     ent2:       str
     ent2_type:  Union[EntityType, None]
     name:       str
     type_:      Union[RelType, None]
-    not_:       bool                = False
+    not_:       bool                    = False
+
+    def __post_init__(self):
+        object.__setattr__(self, 'ent1', f"n_{self.ent1}" if self.ent1.isdigit() else self.ent1)
+        object.__setattr__(self, 'ent2', f"n_{self.ent2}" if self.ent2.isdigit() else self.ent2)
 
     def inverse(self) -> 'Relation':
         """Return the inverse of this relation, where the `not_` truth value is swapped."""
@@ -81,10 +85,9 @@ class KnowledgeBase:
     # greeter.delete_all()
     # greeter.add_knowledge("Lucius", "Diogo", "Cringe", RelType.OTHER, "is")
 
-    # TODO: verify if inverse of relation is already in the KnowledgeBase?    
     @sn_write
     @staticmethod
-    def add_knowledge(declarator:str, relation: Relation, tx: ManagedTransaction=None):
+    def add_knowledge(declarator: str, relation: Relation, tx: ManagedTransaction=None):
         """`declarator` states that `relation.ent1` has a `relation.name` with `relation.ent2`.
         `relation.type_` is one of 2 types:
             - INHERITS: (Diogo is a Person).
@@ -95,6 +98,8 @@ class KnowledgeBase:
         `relation.name` is the name given to the relation, and is only relevant with the OTHER relation type.
 
         `relation` should not have `None` values for the type fields.
+
+        If the declaration of the inverse relation already exists, then it is replaced by the new declaration.
         """
         
         if relation.type_.INHERITS and relation.ent2_type != EntityType.TYPE:
@@ -103,13 +108,16 @@ class KnowledgeBase:
         if relation.ent1_type is None or relation.ent2_type is None or relation.type_ is None:
             raise ValueError("Relation and entity types shold not be None.")
 
-        new_ent1 = f"n_{relation.ent1}" if relation.ent1.isdigit() else relation.ent1 
-        new_ent2 = f"n_{relation.ent2}" if relation.ent2.isdigit() else relation.ent2
+        # If the inverse relation already exists, then remove it first to avoid conflicting declarations
+        inverse_relation = relation.inverse()
+        if KnowledgeBase._tx_assert_relation_exists(inverse_relation, tx):
+            tx.run(f"MATCH (:{inverse_relation.ent1_type.value} {{name: $ent1}})-[r: {inverse_relation.type_.value} {{declarator: $declarator, name: $relation, not: $not_}}]->(:{inverse_relation.ent2_type.value} {{name: $ent2}})" 
+                   "DELETE r", ent1=relation.ent1, declarator=declarator, relation=relation.name, not_=relation.not_, ent2=relation.ent2)
 
         result = tx.run(f"MERGE (e1:{relation.ent1_type.value} {{name: $ent1}}) "
                         f"MERGE (e2:{relation.ent2_type.value} {{name: $ent2}}) "
                         f"MERGE (e1)-[r:{relation.type_.value} {{declarator: $declarator, name: $relation, not: $not_}}]->(e2) "
-                        "RETURN e1.name", declarator=declarator, ent1=new_ent1, ent2=new_ent2, relation=relation.name, not_=relation.not_)
+                        "RETURN e1.name", declarator=declarator, ent1=relation.ent1, ent2=relation.ent2, relation=relation.name, not_=relation.not_)
         
         return result.single()[0]
     
@@ -136,7 +144,10 @@ class KnowledgeBase:
     @staticmethod
     def query_declarators(relation: Relation, tx: ManagedTransaction=None) -> Set[str]:
         """Obtain all declarators that declared the given relation."""
-        results = tx.run(f"MATCH (e1:{relation.ent1_type.value} {{name: $ent1}})-[r:{relation.type_.value} {{name: $relation, not: $not_}}]->(e2{relation.ent2_type.value} {{name: $ent2}}) "
+
+        e1_label, e2_label, rel_type = KnowledgeBase._return_optional_labels(relation)
+
+        results = tx.run(f"MATCH (e1{e1_label} {{name: $ent1}})-[r{rel_type} {{name: $relation, not: $not_}}]->(e2{e2_label} {{name: $ent2}}) "
                         "RETURN r.declarator AS declarator", ent1=relation.ent1, relation=relation.name, ent2=relation.ent2, not_=relation.not_)
         
         return {result.value("declarator") for result in results}
@@ -238,22 +249,21 @@ class KnowledgeBase:
     @staticmethod
     def assert_relation(relation: Relation, tx: ManagedTransaction=None) -> bool:
         """Assert whether or not `relation` exists in the knowledge base"""
-
-        results = tx.run(f"RETURN exists((e1:{relation.ent1_type.value} {{name: $ent1}})-[r:{relation.type_.value} {{name: $relation, not: $not_}}]->(e2:{relation.ent2_type.value} {{name: $ent2}})) AS relation_exists")
-
-        return results.single().value("relation_exists")
+        return KnowledgeBase._tx_assert_relation_exists(relation, tx)
 
     @sn_read
     @staticmethod
     def assert_relation_inheritance(relation: Relation, tx: ManagedTransaction=None) -> bool:
         """Assert whether or not `relation` exists in the knowledge base, with inheritance"""
 
+        e1_label, e2_label, rel_label = KnowledgeBase._return_optional_labels(relation)
+
         results = tx.run(
-            f"MATCH p = (e1 {{name: $ent1}})-[r {{name: $relation, not: $not_}}]->(e2 {{name: $ent2}}) "
+            f"MATCH p = (e1{e1_label} {{name: $ent1}})-[r{rel_label} {{name: $relation, not: $not_}}]->(e2{e2_label} {{name: $ent2}}) "
             "RETURN exists(p) AS relation_exists "
             "UNION "
-            f"MATCH p = (e1 {{name: $ent1}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
-            f"MATCH (ascn)-[r {{name:$relation}}]->(e2 {{name: $ent2}}) "
+            f"MATCH p = (e1{e1_label} {{name: $ent1}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
+            f"MATCH (ascn)-[r{rel_label} {{name:$relation}}]->(e2{e2_label} {{name: $ent2}}) "
             "RETURN exists(p) AS relation_exists", ent1=relation.ent1, ent2=relation.ent2, relation=relation.name
         )
 
@@ -271,10 +281,22 @@ class KnowledgeBase:
     @sn_write
     @staticmethod
     def delete_all(tx: ManagedTransaction=None):
-        result = tx.run("match (a) -[r] -> () delete a, r")
-        result = tx.run("match (a) delete a")
+        result = tx.run("MATCH (a) -[r]-> () DELETE a, r")
+        result = tx.run("MATCH (a) DELETE a")
         return result.single()
     
+    @staticmethod
+    def _tx_assert_relation_exists(relation: Relation, tx: ManagedTransaction) -> bool:
+        e1_label, rel_label, e2_label = KnowledgeBase._return_optional_labels(relation)
+        results = tx.run(f"RETURN exists(({e1_label} {{name: $ent1}})-[{rel_label} {{name: $relation, not: $not_}}]->({e2_label} {{name: $ent2}})) AS relation_exists", ent1=relation.ent1, relation=relation.name, not_=relation.not_, ent2=relation.ent2)
+        return results.single().value("relation_exists")
+
+    @staticmethod
+    def _return_optional_labels(relation: Relation) -> Tuple[str, str, str]:
+        e1_label = f':{relation.ent1_type.value}' if relation.ent1_type is not None else ''
+        e2_label = f':{relation.ent2_type.value}' if relation.ent2_type is not None else ''
+        rel_label = f':{relation.type_.value}' if relation.type_ is not None else ''
+        return e1_label, e2_label, rel_label
 
     # # # # nice >:]
 
