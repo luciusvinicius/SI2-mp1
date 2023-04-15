@@ -168,6 +168,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     # base entities and rel
     entity1 = Entity(nsubject)
     relation = root.lemma_
+    relation_negated = 'neg' in [child.dep_ for child in root.children]
     entity2 = Entity(nobj)
     print("NSUBJ")
     for child in reversed(list(nsubject.children)):
@@ -209,6 +210,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
             entity2.sufix(child)
 
     base_triplet = Triples(entity1, entity2, relation)
+    base_triplet.not_ = relation_negated
     knowledge.append(base_triplet)
 
     # add other tokens
@@ -229,7 +231,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     ent1_type = get_entity_type(entity1)
     ent2_type = get_entity_type(entity2)
     
-    new_relation = Relation(str(entity1), ent1_type, str(entity2).strip(), ent2_type, str(relation), kb_type)
+    new_relation = Relation(str(entity1), ent1_type, str(entity2).strip(), ent2_type, str(relation), kb_type, not_=relation_negated)
 
     kb.add_knowledge(user, new_relation)
 

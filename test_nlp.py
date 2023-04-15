@@ -111,3 +111,24 @@ def test_phrase5(user, nlp, initialize_knowledge_base):
     assert len(result) == len(output)
     for element in result:
         assert element in output 
+
+def test_phrase6(user, nlp, initialize_knowledge_base):
+    """ TEST: Lucius doesn't like Dinis's green house"""
+    text = "Lucius doesn't like Dinis's green house"
+    doc = nlp(text)
+    output = [
+        Triples(ent1=Entity("Lucius", False), rel="like", ent2=Entity("Dinis's green house", False)),
+        Triples(ent1=Entity("Dinis", False), rel="has", ent2=Entity("Dinis's green house", False)),
+        Triples(ent1=Entity("Dinis's green house", False), rel="Instance", ent2=Entity("green house", False))
+    ]
+    output[0].not_ = True
+    output[1].not_ = False
+    output[2].not_ = False
+
+    kb: KnowledgeBase = initialize_knowledge_base
+
+    result = add_knowledge(user, doc, kb)
+
+    assert len(result) == len(output)
+    for element in result:
+        assert element in output
