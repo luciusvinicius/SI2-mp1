@@ -259,12 +259,10 @@ class KnowledgeBase:
         e1_label, e2_label, rel_label = KnowledgeBase._return_optional_labels(relation)
 
         results = tx.run(
-            f"MATCH p = (e1{e1_label} {{name: $ent1}})-[r{rel_label} {{name: $relation, not: $not_}}]->(e2{e2_label} {{name: $ent2}}) "
-            "RETURN exists(p) AS relation_exists "
-            "UNION "
-            f"MATCH p = (e1{e1_label} {{name: $ent1}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
-            f"MATCH (ascn)-[r{rel_label} {{name:$relation}}]->(e2{e2_label} {{name: $ent2}}) "
-            "RETURN exists(p) AS relation_exists", ent1=relation.ent1, ent2=relation.ent2, relation=relation.name
+            f"RETURN exists(({e1_label} {{name: $ent1}})-[{rel_label} {{name: $relation, not: $not_}}]->({e2_label} {{name: $ent2}})) AS relation_exists "
+            "UNION ALL "
+            f"MATCH (e1{e1_label} {{name: $ent1}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
+            f"RETURN exists((ascn)-[{rel_label} {{name: $relation, not: $not_}}]->({e2_label} {{name: $ent2}})) AS relation_exists", ent1=relation.ent1, ent2=relation.ent2, relation=relation.name, not_=relation.not_
         )
 
         return any(result.value("relation_exists") for result in results)
@@ -309,18 +307,19 @@ if __name__ == "__main__":
     
     kb.add_knowledge("Lucius", Relation("Diogo", EntityType.INSTANCE, "cringe", EntityType.TYPE, "is", RelType.OTHER))
     kb.add_knowledge("Lucius", Relation("Diogo", EntityType.INSTANCE, "person", EntityType.TYPE, "is" , RelType.INHERITS))
+    kb.add_knowledge("Lucius", Relation("Lucius", EntityType.INSTANCE, "person", EntityType.TYPE, "is" , RelType.INHERITS))
     kb.add_knowledge("Lucius", Relation("Diogo", EntityType.INSTANCE, "working", EntityType.TYPE, "is", RelType.OTHER))
     kb.add_knowledge("Diogo", Relation("Lucius", EntityType.INSTANCE, "bad declarator", EntityType.TYPE, "is", RelType.OTHER))
     kb.add_knowledge("Diogo", Relation("Lucius", EntityType.INSTANCE, "mushrooms", EntityType.TYPE, "likes", RelType.OTHER))
     kb.add_knowledge("Diogo", Relation("Lucius", EntityType.INSTANCE, "shotos", EntityType.TYPE, "likes", RelType.OTHER))
-    kb.add_knowledge("Martinho", Relation("Person", EntityType.TYPE, "mammal", EntityType.TYPE, "is", RelType.INHERITS))
-    kb.add_knowledge("Lucius", Relation("Mammal", EntityType.TYPE, "animal", EntityType.TYPE, "is", RelType.INHERITS))
+    kb.add_knowledge("Martinho", Relation("person", EntityType.TYPE, "mammal", EntityType.TYPE, "is", RelType.INHERITS))
+    kb.add_knowledge("Lucius", Relation("mammal", EntityType.TYPE, "animal", EntityType.TYPE, "is", RelType.INHERITS))
     kb.add_knowledge("Martinho", Relation("Diogo", EntityType.INSTANCE, "cringe", EntityType.TYPE, "is", RelType.OTHER, not_=True))
     
-    kb.add_knowledge("Diogo", Relation("Person", EntityType.TYPE, "food", EntityType.TYPE, "eats", RelType.OTHER))
-    kb.add_knowledge("Diogo", Relation("Person", EntityType.TYPE, "beans", EntityType.TYPE, "eats", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("person", EntityType.TYPE, "food", EntityType.TYPE, "eats", RelType.OTHER))
+    kb.add_knowledge("Diogo", Relation("person", EntityType.TYPE, "beans", EntityType.TYPE, "eats", RelType.OTHER))
     kb.add_knowledge("Diogo", Relation("Diogo", EntityType.INSTANCE, "chips", EntityType.TYPE, "eats", RelType.OTHER))
-    kb.add_knowledge("Lucius", Relation("Mammal", EntityType.TYPE, "banana", EntityType.TYPE, "eats", RelType.OTHER))
-    kb.add_knowledge("Lucius", Relation("Animal", EntityType.TYPE, "water", EntityType.TYPE, "drinks", RelType.OTHER))
+    kb.add_knowledge("Lucius", Relation("mammal", EntityType.TYPE, "banana", EntityType.TYPE, "eats", RelType.OTHER))
+    kb.add_knowledge("Lucius", Relation("animal", EntityType.TYPE, "water", EntityType.TYPE, "drinks", RelType.OTHER))
 
     kb.close()
