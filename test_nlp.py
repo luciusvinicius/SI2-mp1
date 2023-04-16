@@ -147,3 +147,23 @@ def test_phrase7(user, nlp, initialize_knowledge_base):
     assert len(result) == len(output)
     for element in result:
         assert element in output
+
+def test_phrase8(user, nlp, initialize_knowledge_base):
+    """ TEST: Diogo's book looks like Dinis's book"""
+    text = "Diogo's book looks like Dinis's book"
+    doc = nlp(text)
+    output = [
+        Triples(ent1=Entity("Diogo's book", False), rel="Instance", ent2=Entity("book", False)),
+        Triples(ent1=Entity("Diogo", False), rel="has", ent2=Entity("Diogo's book", False)),
+        Triples(ent1=Entity("Dinis's book", False), rel="Instance", ent2=Entity("book", False)),
+        Triples(ent1=Entity("Dinis", False), rel="has", ent2=Entity("Dinis's book", False)),
+        Triples(ent1=Entity("Diogo's book", False), rel="look like", ent2=Entity("Dinis's book", False)),
+    ]
+
+    kb: KnowledgeBase = initialize_knowledge_base
+
+    result = add_knowledge(user, doc, kb)
+
+    assert len(result) == len(output)
+    for element in result:
+        assert element in output

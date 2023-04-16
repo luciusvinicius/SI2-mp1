@@ -160,15 +160,22 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     root = [token for token in doc if token.head == token][0]
 
     nsubject = list(root.lefts)[0] # Está na documentação -- Lucius. Mentirosos >:(
-    nobj = list(root.rights)[0] if list(root.rights) else root.lemma_
 
     # Verify possessives
     possessives = [child for child in nsubject.children if child.dep_ == "poss"]
-
+    adp = [child for child in root.children if child.pos_ == "ADP"]
     # base entities and rel
     entity1 = Entity(nsubject)
-    relation = root.lemma_
+    relation = f"{root.lemma_} {adp[0].lemma_}" if adp else root.lemma_
     relation_negated = 'neg' in [child.dep_ for child in root.children]
+
+    if adp and list(adp[0].rights):
+        nobj = list(adp[0].rights)[0]
+    elif list(root.rights):
+        nobj = list(root.rights)[0]
+    else:
+        nobj = root
+
     entity2 = Entity(nobj)
 
     print(entity1)
