@@ -208,6 +208,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
             entity2.prefix(child)
         elif nobj.dep_ == "xcomp" and child.dep_ == "dobj":
             entity2.sufix(child)
+    print('Negated?', 'Yes' if relation_negated else 'No')
 
     base_triplet = Triples(entity1, entity2, relation)
     base_triplet.not_ = relation_negated
