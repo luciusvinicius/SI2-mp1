@@ -83,3 +83,13 @@ def test_query_descendants_relation(example_data):
     kb_output = kb.query_descendants_relation("mammal", "eats", RelType.OTHER)
 
     assert kb_output == output
+
+
+def test_no_conflicting_declarations(initialize_knowledge_base):
+
+    kb: KnowledgeBase = initialize_knowledge_base
+
+    kb.add_knowledge('Lucius', Relation('Lucius', EntityType.INSTANCE, 'Dinis\'s green house', EntityType.INSTANCE, 'like', RelType.OTHER, not_=True))
+    kb.add_knowledge('Lucius', Relation('Lucius', EntityType.INSTANCE, 'Dinis\'s green house', EntityType.INSTANCE, 'like', RelType.OTHER, not_=False))
+
+    assert len(kb.query_declarations('Lucius')) == 1
