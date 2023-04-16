@@ -107,7 +107,7 @@ def test_phrase5(user, nlp, initialize_knowledge_base):
     kb = initialize_knowledge_base
 
     result = add_knowledge(user, doc, kb)
-    
+
     assert len(result) == len(output)
     for element in result:
         assert element in output 
@@ -129,6 +129,21 @@ def test_phrase6(user, nlp, initialize_knowledge_base):
 
     result = add_knowledge(user, doc, kb)
 
+    assert len(result) == len(output)
+    for element in result:
+        assert element in output
+
+def test_phrase7(user, nlp, initialize_knowledge_base):
+    """ TEST: The director is 65 years old"""
+    text = "The director is 65 years old"
+    doc = nlp(text)
+    output = [
+        Triples(ent1=Entity("director", False), rel="be", ent2=Entity("65 years old", False)),
+    ]
+
+    kb: KnowledgeBase = initialize_knowledge_base
+
+    result = add_knowledge(user, doc, kb)
     assert len(result) == len(output)
     for element in result:
         assert element in output
