@@ -111,8 +111,8 @@ class KnowledgeBase:
         # If the inverse relation already exists, then remove it first to avoid conflicting declarations
         inverse_relation = relation.inverse()
         if KnowledgeBase._tx_assert_relation_exists(inverse_relation, tx):
-            tx.run(f"MATCH (:{inverse_relation.ent1_type.value} {{name: $ent1}})-[r: {inverse_relation.type_.value} {{declarator: $declarator, name: $relation, not: $not_}}]->(:{inverse_relation.ent2_type.value} {{name: $ent2}})" 
-                   "DELETE r", ent1=relation.ent1, declarator=declarator, relation=relation.name, not_=relation.not_, ent2=relation.ent2)
+            tx.run(f"MATCH (:{inverse_relation.ent1_type.value} {{name: $ent1}})-[r:{inverse_relation.type_.value} {{declarator: $declarator, name: $relation, not: $not_}}]->(:{inverse_relation.ent2_type.value} {{name: $ent2}})" 
+                   "DELETE r", ent1=inverse_relation.ent1, declarator=declarator, relation=inverse_relation.name, not_=inverse_relation.not_, ent2=inverse_relation.ent2)
 
         result = tx.run(f"MERGE (e1:{relation.ent1_type.value} {{name: $ent1}}) "
                         f"MERGE (e2:{relation.ent2_type.value} {{name: $ent2}}) "
@@ -285,7 +285,7 @@ class KnowledgeBase:
     
     @staticmethod
     def _tx_assert_relation_exists(relation: Relation, tx: ManagedTransaction) -> bool:
-        e1_label, rel_label, e2_label = KnowledgeBase._return_optional_labels(relation)
+        e1_label, e2_label, rel_label = KnowledgeBase._return_optional_labels(relation)
         results = tx.run(f"RETURN exists(({e1_label} {{name: $ent1}})-[{rel_label} {{name: $relation, not: $not_}}]->({e2_label} {{name: $ent2}})) AS relation_exists", ent1=relation.ent1, relation=relation.name, not_=relation.not_, ent2=relation.ent2)
         return results.single().value("relation_exists")
 
