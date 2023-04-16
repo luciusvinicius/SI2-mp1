@@ -50,6 +50,8 @@ def main():
         text = input("# ")
         if text.lower() == "q!":
             break
+        if len(text.strip()) == 0:
+            continue
 
         # Do stuff with text
         doc = nlp(text)
@@ -63,14 +65,16 @@ def main():
         
         word = text.split(" ")[0]
         
-        if word[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
-            query_knowledge(user, doc, kb)
-            # confidence_table.get_relation_confidence(Relation())
-        else:
-            add_knowledge(user, doc, kb)
-            confidence_table.register_declarator(user)
-            confidence_table.update_confidences()
-
+        try:
+            if word[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
+                query_knowledge(user, doc, kb)
+                # confidence_table.get_relation_confidence(Relation())
+            else:
+                add_knowledge(user, doc, kb)
+                confidence_table.register_declarator(user)
+                confidence_table.update_confidences()
+        except:
+            print("Sorry, I didn't understand that. Maybe try rephrasing your sentence?")
 
         # Output text based on stuff that was done
         
@@ -189,7 +193,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
 
             ent1 = Entity(child)
             ent2 = entity1#.prefix(child)
-            rel = "has"
+            rel = "have"
             triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
             triplet.not_ = False
             knowledge.append(triplet)
@@ -213,7 +217,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
 
             ent1 = Entity(child)
             ent2 = entity2#.prefix(child)
-            rel = "has"
+            rel = "have"
             triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
             triplet.not_ = False
             knowledge.append(triplet)
@@ -232,7 +236,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     
     for k in knowledge:
         print(k)
-        kb_type = RelType.INHERITS if str(k.rel) == "be" else RelType.OTHER
+        kb_type = RelType.INHERITS if str(k.rel) in ["be", "Instance"] else RelType.OTHER
         ent1_type = get_entity_type(k.ent1)
         ent2_type = get_entity_type(k.ent2)
         
