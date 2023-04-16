@@ -75,6 +75,9 @@ def test_confidence_of_relation_inverses_depends_on_number_of_declarators(data_d
         else:
             assert relation_confidence > relation_inverse_confidence
 
+        if n_declarators > 0 and n_declarators_inverse > 0:
+            assert relation_confidence == 1 - relation_inverse_confidence
+
 def test_confidence_of_bare_non_static_disagreement_at_half(initialize_knowledge_base, confidence_table):
     """Confidence of disagreement between two relations should be at half, if no other relations are present in the knowledge base"""
 
