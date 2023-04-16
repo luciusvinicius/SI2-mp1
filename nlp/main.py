@@ -170,8 +170,14 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     relation = root.lemma_
     relation_negated = 'neg' in [child.dep_ for child in root.children]
     entity2 = Entity(nobj)
+
+    print(entity1)
+    print(entity2)
+    print(root)
+
     print("NSUBJ")
-    for child in reversed(list(nsubject.children)):
+    children = list(reversed(list(nsubject.children)))
+    for child in children:
         print(f"{child} {child.pos_} {child.dep_}")
         if child.dep_ == "poss":
             ent2 = copy(entity1)
@@ -185,12 +191,15 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
             rel = "has"
             triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
             knowledge.append(triplet)
-        elif child.dep_ == "amod":
+        elif child.dep_ in ["amod", "npadvmod", "nummod"]:
             entity1.prefix(child)
+            new_children = child.children
+            children.extend(new_children)
         elif nsubject.dep_ == "xcomp" and child.dep_ == "dobj":
             entity1.sufix(child)
     print("NOBJ")
-    for child in reversed(list(nobj.children)):
+    children = list(reversed(list(nobj.children)))
+    for child in children:
         print(f"{child} {child.pos_} {child.dep_}")
         if child.dep_ == "poss":
             ent2 = copy(entity2)
@@ -204,8 +213,10 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
             rel = "has"
             triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
             knowledge.append(triplet)
-        elif child.dep_ == "amod":
+        elif child.dep_ in ["amod", "npadvmod", "nummod"]:
             entity2.prefix(child)
+            new_children = child.children
+            children.extend(new_children)
         elif nobj.dep_ == "xcomp" and child.dep_ == "dobj":
             entity2.sufix(child)
 
