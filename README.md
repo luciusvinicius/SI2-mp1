@@ -1,5 +1,7 @@
 # SI2-mp1
 
+Python 3.10 is required to run this project.
+
 ## Requirements instalation
 
 ```

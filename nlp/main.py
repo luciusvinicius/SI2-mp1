@@ -14,6 +14,7 @@ from sn.kb import EntityType, KnowledgeBase, RelType, Relation
 from sn.confidence import ConfidenceTable
 from copy import copy
 from nlp.objects import Entity, Triples
+from nlp.responses import *
 
 def init() -> spacy.Language:
     nlp = spacy.load("en_core_web_sm")
@@ -64,19 +65,32 @@ def main():
         # If is a question
         
         word = text.split(" ")[0]
+
+        respond_to_query = True
         
         try:
             if word[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
-                query_knowledge(user, doc, kb)
+                content, bool_query = query_knowledge(user, doc, kb)
+                #print(content)
                 # confidence_table.get_relation_confidence(Relation())
             else:
-                add_knowledge(user, doc, kb)
+                respond_to_query = False
+                knowledge = add_knowledge(user, doc, kb)
+                #print(knowledge)
                 confidence_table.register_declarator(user)
                 confidence_table.update_confidences()
         except:
             print("Sorry, I didn't understand that. Maybe try rephrasing your sentence?")
-
-        # Output text based on stuff that was done
+        else:
+            # Output text based on stuff that was done
+            if respond_to_query:
+                if bool_query:
+                    response = bool_response(content, 100)
+                else:
+                    response = complex_response(content, 100)
+            else:
+                response = new_knowledge_response()
+            print(response)
         
 # What Diogo like?
 # What does Diogo like?
@@ -85,9 +99,10 @@ def main():
 # What does <entity> <rel>?
 # Does <entity1> <rel> <entity2>? Example: does Joana eat bananas?
 def query_knowledge(user:str, doc, kb: KnowledgeBase):
+    bool_query = False
     
-    for token in doc:
-        print(token, token.pos_, list(token.children), token.dep_)
+    # for token in doc:
+    #     print(token, token.pos_, list(token.children), token.dep_)
     
     root = [token for token in doc if token.head == token][0]
     
@@ -96,12 +111,13 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     # Boolean question specific use cases (that for some reason treats "like" as preposition)
     # e.g.: "Does Diogo like rice?"
     if len(possible_subjects) == 0:
+        bool_query = True
         nsubject = root
         rel = [token for token in root.children if token.dep_ == "prep"][0]
         entity2 = [token for token in rel.children if token.dep_ == "pobj"][0]
         
-        print(f"Question triplet: {nsubject}, {rel}, {entity2}")
-        return query_boolean(nsubject, rel, entity2, kb)
+        # print(f"Question triplet: {nsubject}, {rel}, {entity2}")
+        return query_boolean(nsubject, rel, entity2, kb), bool_query
     
     
     nsubject = possible_subjects[0]
@@ -122,25 +138,25 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         
         # kb_type = RelType.INHERITS if str(rel) == "is" else RelType.OTHER
         
-        print(f"Question dupla: {nsubject}, {rel}")
+        # print(f"Question dupla: {nsubject}, {rel}")
         
         
         query = kb.query_inheritance_relation(str(entity1), str(rel))
         
-        return entity1, rel, query
+        return (entity1, rel, query), bool_query
     else:
-        print(f"Question tripla bool: {nsubject}, {rel}, {entity2}")
+        # print(f"Question tripla bool: {nsubject}, {rel}, {entity2}")
         
-        return query_boolean(entity1, rel, entity2[0], kb)
+        return query_boolean(entity1, rel, entity2[0], kb), bool_query
             
 
 def query_boolean(ent1, rel, ent2, kb:KnowledgeBase):
     relation = Relation(str(ent1), None, str(ent2), None, str(rel), None)
-    print(f"{relation=}")
+    # print(f"{relation=}")
     return kb.assert_relation_inheritance(relation)
 
 def add_knowledge(user:str, doc, kb: KnowledgeBase):
-    print("TEST")
+    # print("TEST")
     ###### RULES OF (not) WACKY STUFF ######
 
     # identify ent1 by nsubj dependency, or poss if nsubj has poss childfor child in nobj.children:
@@ -156,8 +172,8 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     #######################################
 
     # ------ DEBUG PRINT -----
-    for token in doc:
-        print(token, token.pos_, list(token.children), token.dep_)
+    # for token in doc:
+    #     print(token, token.pos_, list(token.children), token.dep_)
 
     knowledge = []
 
@@ -182,14 +198,14 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
 
     entity2 = Entity(nobj)
 
-    print(entity1)
-    print(entity2)
-    print(root)
+    # print(entity1)
+    # print(entity2)
+    # print(root)
 
-    print("NSUBJ")
+    # print("NSUBJ")
     children = list(reversed(list(nsubject.children)))
     for child in children:
-        print(f"{child} {child.pos_} {child.dep_}")
+        # print(f"{child} {child.pos_} {child.dep_}")
         if child.dep_ == "poss":
             ent2 = copy(entity1)
             entity1 = entity1.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
@@ -210,10 +226,10 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
             children.extend(new_children)
         elif nsubject.dep_ == "xcomp" and child.dep_ == "dobj":
             entity1.sufix(child)
-    print("NOBJ")
+    # print("NOBJ")
     children = list(reversed(list(nobj.children)))
     for child in children:
-        print(f"{child} {child.pos_} {child.dep_}")
+        # print(f"{child} {child.pos_} {child.dep_}")
         if child.dep_ == "poss":
             ent2 = copy(entity2)
             entity2 = entity2.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
@@ -234,7 +250,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
             children.extend(new_children)
         elif nobj.dep_ == "xcomp" and child.dep_ == "dobj":
             entity2.sufix(child)
-    print('Negated?', 'Yes' if relation_negated else 'No')
+    # print('Negated?', 'Yes' if relation_negated else 'No')
 
     base_triplet = Triples(entity1, entity2, relation)
     base_triplet.not_ = relation_negated
@@ -242,7 +258,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
 
     
     for k in knowledge:
-        print(k)
+        # print(k)
         kb_type = RelType.INHERITS if str(k.rel) in ["be", "Instance"] else RelType.OTHER
         ent1_type = get_entity_type(k.ent1)
         ent2_type = get_entity_type(k.ent2)
