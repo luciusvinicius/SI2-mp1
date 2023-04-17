@@ -230,20 +230,15 @@ class KnowledgeBase:
         )
         
         return {result.value('subject'):(frozenset(result.value('characteristics')), result.value('distance')) for result in results}
-        
-    # @sn_read
-    # @staticmethod
-    # def query_descendants(ent:str, tx: ManagedTransaction=None) -> Set[Tuple[str, str, Set[str]]]:
-    #     """Query all attributes of entity descendants"""
-    #     # this sounds like a bad idea maybe
-    #     raise NotImplementedError()
 
     @sn_read
     @staticmethod
-    def query_descendants_relation(ent:str, relation:str, relation_type:RelType, tx: ManagedTransaction=None) -> Set[str]:
+    def query_descendants_relation(ent:str, relation:str, relation_type:RelType=None, tx: ManagedTransaction=None) -> Set[str]:
         """Query the specified *local* attribute of entity descendants"""
         
-        results = tx.run(f"MATCH (eOut)<-[:{relation_type.value} {{name: $relation}}]-(desc)-[r:{RelType.INHERITS.value} *1..]->(eIn {{name: $entIn}}) "
+        rel_label = f':{relation_type.value}' if relation_type is not None else ''
+
+        results = tx.run(f"MATCH (eOut)<-[{rel_label} {{name: $relation}}]-(desc)-[r:{RelType.INHERITS.value} *1..]->(eIn {{name: $entIn}}) "
                         "RETURN eOut.name AS other_entity", relation=relation, entIn=ent)
 
         return {result.value("other_entity") for result in results}
