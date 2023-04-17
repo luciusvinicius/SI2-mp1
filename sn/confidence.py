@@ -22,8 +22,8 @@ class ConfidenceTable:
     Confidence for non-static declarators is calculated by considering their agreement with the static and
     other non-static declarators separately.
     The weight of this agreement is represented by the factors `saf_weight` and `nsaf_weight` respectively.
-    If `saf_weight + nsaf_weight > 1`, then the non-static declarator's confidence can overshoot and be
-    greater than 1. In practice, the value is clamped.
+    If `saf_weight + nsaf_weight > 1`, then the non-static declarator's confidence can overshoot and
+    undershoot, and thus be greater than 1 or lower than 0. In practice, the value is clamped.
 
     Parameters
     ----------
@@ -61,9 +61,9 @@ class ConfidenceTable:
             saf = self._get_agreement_factor(non_static_declarator, static=True)
             nsaf = self._get_agreement_factor(non_static_declarator, static=False)
 
-            self._confidences[non_static_declarator] = min(1.0, self._base_confidence
+            self._confidences[non_static_declarator] = max(0.0, min(1.0, self._base_confidence
                 + (1 - self._base_confidence) * saf * self._saf_weight
-                + (1 - self._base_confidence) * nsaf * self._nsaf_weight)
+                + (1 - self._base_confidence) * nsaf * self._nsaf_weight))
 
     def register_declarator(self, declarator: str, static_confidence: float=None):
         """Register a static/non-static declarator.
