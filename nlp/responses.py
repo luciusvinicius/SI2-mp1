@@ -55,7 +55,7 @@ def complex_response(content, confidence):
         ]
     else:
         target_entities = list(content[2][str(entity)][0])
-        target_entities_string = str(target_entities[0]) if len(target_entities) == 1 else ''.join([str(target_entities[i]) + ", " for i in range(len(target_entities)-1)]) + "and " + str(target_entities[-1])
+        target_entities_string = str(target_entities[0][0]) if len(target_entities) == 1 else ''.join([str(target_entities[i][0]) + ", " for i in range(len(target_entities)-1)]) + "and " + str(target_entities[-1][0])
         if confidence > 85:
             choices = [
                 f"I am quite sure {entity} does {relationship} {target_entities_string}.",
