@@ -42,9 +42,9 @@ def test_diogo_eats(example_data):
     kb: KnowledgeBase = example_data
     
     output = {
-        "Diogo": ({"chips"}, 0),
-        "person": ({"food", "beans"}, 1),
-        "mammal": ({"banana"}, 2),
+        "Diogo": ({("chips", True)}, 0),
+        "person": ({("food", True), ("beans", True)}, 1),
+        "mammal": ({("banana", True)}, 2),
     }
 
     kb_output = kb.query_inheritance_relation("Diogo", "eats")
@@ -57,7 +57,7 @@ def test_diogo_eats_with_declarator(example_data):
     kb: KnowledgeBase = example_data
     
     output = {
-        "mammal": ({"banana"}, 2),
+        "mammal": ({("banana", True)}, 2),
     }
 
     kb_output = kb.query_inheritance_relation("Diogo", "eats", declarator="Lucius")

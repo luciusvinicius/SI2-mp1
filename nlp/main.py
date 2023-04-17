@@ -43,7 +43,7 @@ def main():
     user = input("Please insert your username: ")
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
     kb.delete_all()
-    confidence_table = ConfidenceTable(kb)
+    confidence_table = ConfidenceTable(kb, saf_weight=0.5, nsaf_weight=0.5, base_confidence=0.5)
     nlp = init()
     print("(!) Hello, how can I help you? (q! - quit)")
     while True:
@@ -103,7 +103,6 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         print(f"Question triplet: {nsubject}, {rel}, {entity2}")
         return query_boolean(nsubject, rel, entity2, kb)
     
-    
     nsubject = possible_subjects[0]
 
     # Verify possessives
@@ -113,7 +112,9 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     entity1 = possessives[0] if possessives else nsubject # TODO change to get object ("Diogo's dog" is returning only "dog")
     rel = nsubject if possessives else root.lemma_
     entity2 = [child for child in root.children if child.dep_ == "dobj" and child.pos_.lower() != "pron"]
-    
+
+    relation_negated = 'neg' in [child.dep_ for child in root.children]
+
     # Not a boolean question
     if len(entity2) == 0:
     
@@ -131,11 +132,11 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     else:
         print(f"Question tripla bool: {nsubject}, {rel}, {entity2}")
         
-        return query_boolean(entity1, rel, entity2[0], kb)
+        return query_boolean(entity1, rel, entity2[0], kb, relation_negated)
             
 
-def query_boolean(ent1, rel, ent2, kb:KnowledgeBase):
-    relation = Relation(str(ent1), None, str(ent2), None, str(rel), None)
+def query_boolean(ent1, rel, ent2, kb:KnowledgeBase, not_:bool=False):
+    relation = Relation(str(ent1), None, str(ent2), None, str(rel), None, not_)
     print(f"{relation=}")
     return kb.assert_relation_inheritance(relation)
 
