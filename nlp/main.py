@@ -42,7 +42,7 @@ def get_entity_type(token) -> EntityType:
 def main():
     user = input("Please insert your username: ")
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
-    # kb.delete_all()
+    kb.delete_all()
     confidence_table = ConfidenceTable(kb)
     nlp = init()
     print("(!) Hello, how can I help you? (q! - quit)")
@@ -50,6 +50,8 @@ def main():
         text = input("# ")
         if text.lower() == "q!":
             break
+        if len(text.strip()) == 0:
+            continue
 
         # Do stuff with text
         doc = nlp(text)
@@ -63,14 +65,16 @@ def main():
         
         word = text.split(" ")[0]
         
-        if word[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
-            query_knowledge(user, doc, kb)
-            # confidence_table.get_relation_confidence(Relation())
-        else:
-            add_knowledge(user, doc, kb)
-            confidence_table.register_declarator(user)
-            confidence_table.update_confidences()
-
+        try:
+            if word[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
+                query_knowledge(user, doc, kb)
+                # confidence_table.get_relation_confidence(Relation())
+            else:
+                add_knowledge(user, doc, kb)
+                confidence_table.register_declarator(user)
+                confidence_table.update_confidences()
+        except:
+            print("Sorry, I didn't understand that. Maybe try rephrasing your sentence?")
 
         # Output text based on stuff that was done
         
@@ -160,15 +164,22 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     root = [token for token in doc if token.head == token][0]
 
     nsubject = list(root.lefts)[0] # Está na documentação -- Lucius. Mentirosos >:(
-    nobj = list(root.rights)[0] if list(root.rights) else root.lemma_
 
     # Verify possessives
     possessives = [child for child in nsubject.children if child.dep_ == "poss"]
-
+    adp = [child for child in root.children if child.pos_ == "ADP"]
     # base entities and rel
     entity1 = Entity(nsubject)
-    relation = root.lemma_
+    relation = f"{root.lemma_} {adp[0].lemma_}" if adp else root.lemma_
     relation_negated = 'neg' in [child.dep_ for child in root.children]
+
+    if adp and list(adp[0].rights):
+        nobj = list(adp[0].rights)[0]
+    elif list(root.rights):
+        nobj = list(root.rights)[0]
+    else:
+        nobj = root
+
     entity2 = Entity(nobj)
 
     print(entity1)
@@ -184,12 +195,14 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
             entity1 = entity1.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
             rel = "Instance"
             triplet = Triples(ent1=entity1, ent2=ent2, rel=rel)
+            triplet.not_ = False
             knowledge.append(triplet)
 
             ent1 = Entity(child)
             ent2 = entity1#.prefix(child)
-            rel = "has"
+            rel = "have"
             triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
+            triplet.not_ = False
             knowledge.append(triplet)
         elif child.dep_ in ["amod", "npadvmod", "nummod"]:
             entity1.prefix(child)
@@ -206,12 +219,14 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
             entity2 = entity2.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
             rel = "Instance"
             triplet = Triples(ent1=entity2, ent2=ent2, rel=rel)
+            triplet.not_ = False
             knowledge.append(triplet)
 
             ent1 = Entity(child)
             ent2 = entity2#.prefix(child)
-            rel = "has"
+            rel = "have"
             triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
+            triplet.not_ = False
             knowledge.append(triplet)
         elif child.dep_ in ["amod", "npadvmod", "nummod"]:
             entity2.prefix(child)
@@ -225,27 +240,15 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     base_triplet.not_ = relation_negated
     knowledge.append(base_triplet)
 
-    # add other tokens
-    
-    # if nobj.dep_ == "xcomp":
-    #     entity2 += f" {str(nobj.children[0])}"
-    # elif nobj.dep_ in ["dobj", "pobj"]:
-    #     entity2 = f"{str(nobj.children[0])} {entity2}"
-
-    # hotashi's    gameplay
-    # POSS   CASE  DOBJ 
     
     for k in knowledge:
         print(k)
-    
-    # Whats this?
-    kb_type = RelType.INHERITS if str(relation) == "be" else RelType.OTHER
-    ent1_type = get_entity_type(entity1)
-    ent2_type = get_entity_type(entity2)
-    
-    new_relation = Relation(str(entity1), ent1_type, str(entity2).strip(), ent2_type, str(relation), kb_type, not_=relation_negated)
-
-    kb.add_knowledge(user, new_relation)
+        kb_type = RelType.INHERITS if str(k.rel) in ["be", "Instance"] else RelType.OTHER
+        ent1_type = get_entity_type(k.ent1)
+        ent2_type = get_entity_type(k.ent2)
+        
+        new_relation = Relation(str(k.ent1), ent1_type, str(k.ent2).strip(), ent2_type, str(k.rel), kb_type, not_=k.not_)
+        kb.add_knowledge(user, new_relation)
 
     return knowledge
 
