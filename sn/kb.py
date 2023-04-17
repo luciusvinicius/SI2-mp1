@@ -185,6 +185,7 @@ class KnowledgeBase:
         
         return {result.value("entity") for result in results}
         
+    # TODO: determine what the return format is
     @sn_read
     @staticmethod
     def query_inheritance(ent:str, tx: ManagedTransaction=None) -> Dict[str, Tuple[Set[str], int]]:
@@ -212,9 +213,9 @@ class KnowledgeBase:
 
     @sn_read
     @staticmethod
-    def query_inheritance_relation(ent:str, relation:str, declarator:str=None, tx: ManagedTransaction=None) ->  Dict[str, Tuple[Set[str], int]]:
+    def query_inheritance_relation(ent:str, relation:str, declarator:str=None, tx: ManagedTransaction=None) ->  Dict[str, Tuple[Set[Tuple[str, bool]], int]]:
         """Query the specified attribute of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations.
-        The output is each Entity in the key, the characteristics and distance as the tuple elements"""
+        The output is each Entity in the key, the characteristics, truth values and distance as the tuple elements"""
         
         # TODO: cypher injection
         declarator_filter = f", declarator: '{declarator}'" if declarator is not None else ""
@@ -222,29 +223,24 @@ class KnowledgeBase:
         results = tx.run(
             f"MATCH (ent1 {{name:$ent}}) "
             f"MATCH (ent1)-[r {{name:$relation {declarator_filter}}}]->(ent2) "
-            "RETURN ent1.name AS subject, collect(ent2.name) AS characteristics, 0 AS distance "
+            "RETURN ent1.name AS subject, collect(ent2.name) AS characteristics, collect(r.not) AS nots, 0 AS distance "
             "UNION "
             f"MATCH p = (ent1 {{name:$ent}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
             f"MATCH (ascn)-[r {{name:$relation {declarator_filter}}}]->(ent2) "
-            "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, length(p) AS distance", ent=ent, relation=relation
+            "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, collect(r.not) AS nots, length(p) AS distance", ent=ent, relation=relation
         )
         
-        return {result.value('subject'):(frozenset(result.value('characteristics')), result.value('distance')) for result in results}
-        
-    # @sn_read
-    # @staticmethod
-    # def query_descendants(ent:str, tx: ManagedTransaction=None) -> Set[Tuple[str, str, Set[str]]]:
-    #     """Query all attributes of entity descendants"""
-    #     # this sounds like a bad idea maybe
-    #     raise NotImplementedError()
+        return {result.value('subject'):(frozenset(zip(result.value('characteristics'), [not n for n in result.value('nots')])), result.value('distance')) for result in results}
 
     @sn_read
     @staticmethod
-    def query_descendants_relation(ent:str, relation:str, relation_type:RelType, tx: ManagedTransaction=None) -> Set[str]:
+    def query_descendants_relation(ent:str, relation:str, relation_type:RelType=None, not_:bool=False, tx: ManagedTransaction=None) -> Set[str]:
         """Query the specified *local* attribute of entity descendants"""
         
-        results = tx.run(f"MATCH (eOut)<-[:{relation_type.value} {{name: $relation}}]-(desc)-[r:{RelType.INHERITS.value} *1..]->(eIn {{name: $entIn}}) "
-                        "RETURN eOut.name AS other_entity", relation=relation, entIn=ent)
+        rel_label = f':{relation_type.value}' if relation_type is not None else ''
+
+        results = tx.run(f"MATCH (eOut)<-[{rel_label} {{name: $relation, not: $not_}}]-(desc)-[r:{RelType.INHERITS.value} *1..]->(eIn {{name: $entIn}}) "
+                        "RETURN eOut.name AS other_entity", relation=relation, entIn=ent, not_=not_)
 
         return {result.value("other_entity") for result in results}
 
