@@ -102,7 +102,7 @@ class KnowledgeBase:
         If the declaration of the inverse relation already exists, then it is replaced by the new declaration.
         """
         
-        if relation.type_.INHERITS and relation.ent2_type != EntityType.TYPE:
+        if relation.type_ == RelType.INHERITS and relation.ent2_type != EntityType.TYPE:
             raise ValueError("Can only inherit from types entities.")
 
         if relation.ent1_type is None or relation.ent2_type is None or relation.type_ is None:
@@ -212,17 +212,20 @@ class KnowledgeBase:
 
     @sn_read
     @staticmethod
-    def query_inheritance_relation(ent:str, relation:str, tx: ManagedTransaction=None) ->  Dict[str, Tuple[Set[str], int]]:
+    def query_inheritance_relation(ent:str, relation:str, declarator:str=None, tx: ManagedTransaction=None) ->  Dict[str, Tuple[Set[str], int]]:
         """Query the specified attribute of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations.
         The output is each Entity in the key, the characteristics and distance as the tuple elements"""
         
+        # TODO: cypher injection
+        declarator_filter = f", declarator: '{declarator}'" if declarator is not None else ""
+
         results = tx.run(
             f"MATCH (ent1 {{name:$ent}}) "
-            "MATCH (ent1)-[r {name:$relation}]->(ent2) "
+            f"MATCH (ent1)-[r {{name:$relation {declarator_filter}}}]->(ent2) "
             "RETURN ent1.name AS subject, collect(ent2.name) AS characteristics, 0 AS distance "
             "UNION "
             f"MATCH p = (ent1 {{name:$ent}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
-            "MATCH (ascn)-[r {name:$relation}]->(ent2) "
+            f"MATCH (ascn)-[r {{name:$relation {declarator_filter}}}]->(ent2) "
             "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, length(p) AS distance", ent=ent, relation=relation
         )
         
@@ -253,13 +256,14 @@ class KnowledgeBase:
 
     @sn_read
     @staticmethod
-    def assert_relation_inheritance(relation: Relation, tx: ManagedTransaction=None) -> bool:
+    def assert_relation_inheritance(relation: Relation, declarator: str=None, tx: ManagedTransaction=None) -> bool:
         """Assert whether or not `relation` exists in the knowledge base, with inheritance"""
 
         e1_label, e2_label, rel_label = KnowledgeBase._return_optional_labels(relation)
+        declarator_filter = f", declarator: '{declarator}'" if declarator is not None else ""
 
         results = tx.run(
-            f"RETURN exists(({e1_label} {{name: $ent1}})-[{rel_label} {{name: $relation, not: $not_}}]->({e2_label} {{name: $ent2}})) AS relation_exists "
+            f"RETURN exists(({e1_label} {{name: $ent1}})-[{rel_label} {{name: $relation, not: $not_ {declarator_filter}}}]->({e2_label} {{name: $ent2}})) AS relation_exists "
             "UNION ALL "
             f"MATCH (e1{e1_label} {{name: $ent1}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
             f"RETURN exists((ascn)-[{rel_label} {{name: $relation, not: $not_}}]->({e2_label} {{name: $ent2}})) AS relation_exists", ent1=relation.ent1, ent2=relation.ent2, relation=relation.name, not_=relation.not_

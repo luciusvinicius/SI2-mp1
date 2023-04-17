@@ -52,6 +52,19 @@ def test_diogo_eats(example_data):
     assert kb_output == output
 
 
+def test_diogo_eats_with_declarator(example_data):
+    
+    kb: KnowledgeBase = example_data
+    
+    output = {
+        "mammal": ({"banana"}, 2),
+    }
+
+    kb_output = kb.query_inheritance_relation("Diogo", "eats", declarator="Lucius")
+
+    assert kb_output == output
+
+
 def test_query_local(example_data):
 
     kb: KnowledgeBase = example_data
