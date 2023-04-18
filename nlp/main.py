@@ -86,17 +86,23 @@ def main():
             if respond_to_query:
                 if bool_query:
                     entity1, rel, entity2, negated, result = content
-                    confidence = confidence_table.get_relation_confidence(Relation(
-                        ent1=entity1,
+                    relation = Relation(
+                        ent1=str(entity1),
                         ent1_type=None,
-                        ent2=entity2,
+                        ent2=str(entity2),
                         ent2_type=None,
-                        name=rel,
+                        name=str(rel),
                         type_=None,
                         not_=negated
-                    ))
-
+                    )
+                    
+                    # We completely trust the user if they are asking about something that they declared
+                    if kb.assert_relation_inheritance(relation, declarator=user):
+                        confidence = 1.0
+                    else:
+                        confidence = confidence_table.get_relation_confidence(relation)
                     response = bool_response(result, confidence)
+
                 else:
                     confidence = 0
                     confidence_n = 0

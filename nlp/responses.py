@@ -1,7 +1,14 @@
 import random
 
 def bool_response(value, confidence):
-    if confidence > 0.85:
+    if confidence is None:
+        choices = [
+            "I have no information regarding that.",
+            "I don't know anything about that."
+            "I have no idea."
+        ]
+
+    elif confidence > 0.85:
         if value:
             choices = [
                 "Most certainly correct!",
