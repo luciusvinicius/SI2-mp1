@@ -61,7 +61,7 @@ def main():
         doc = nlp(text)
 
         # --------- DEBUG: SHOW TREE ---------
-        # displacy.serve(doc, auto_select_port=True, style="dep")
+        displacy.serve(doc, auto_select_port=True, style="dep")
 
         # Check if phrase is a question or not
         
@@ -182,9 +182,14 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     # e.g.: "Does Diogo like rice?"
     if len(possible_subjects) == 0:
         bool_query = True
-        nsubject = root
-        rel = [token for token in root.children if token.dep_ == "prep"][0]
-        entity2 = [token for token in rel.children if token.dep_ == "pobj"][0]
+        if root.lemma_ == "be":
+            nsubject = [token for token in root.children if token.dep_ == "attr"][0]
+            rel = root.lemma_
+            entity2 = [token for token in nsubject.children if token.dep_ == "amod"][0]
+        else:
+            nsubject = root
+            rel = [token for token in root.children if token.dep_ == "prep"][0]
+            entity2 = [token for token in rel.children if token.dep_ == "pobj"][0]
         
         # print(f"Question triplet: {nsubject}, {rel}, {entity2}")
 
