@@ -69,7 +69,7 @@ class Relation:
         return Relation(self.ent1, self.ent1_type, self.ent2, self.ent2_type, self.name, self.type_, not self.not_)
     
     def __str__(self) -> str:
-        return f"({self.ent1})-[{self.name}]->({self.ent2})"
+        return f"({self.ent1}{(' :' + self.ent1_type.value) if self.ent1_type is not None else ''})-[{('not ' if self.not_ else '')}{self.name}{(' :' + self.type_.value) if self.type_ is not None else ''}]->({self.ent2}{(' :' + self.ent2_type.value) if self.ent2_type is not None else ''})"
 
 class KnowledgeBase:
 
@@ -101,12 +101,15 @@ class KnowledgeBase:
 
         If the declaration of the inverse relation already exists, then it is replaced by the new declaration.
         """
-        
-        if relation.type_ == RelType.INHERITS and relation.ent2_type != EntityType.TYPE:
-            raise ValueError("Can only inherit from types entities.")
 
         if relation.ent1_type is None or relation.ent2_type is None or relation.type_ is None:
             raise ValueError("Relation and entity types shold not be None.")
+        
+        if relation.type_ == RelType.INHERITS and relation.ent2_type != EntityType.TYPE:
+            raise ValueError("Can only inherit from types entities.")
+        
+        if relation.type_ == RelType.INHERITS and relation.not_:
+            raise ValueError("'Inherits' relations can't be negated.")
 
         # If the inverse relation already exists, then remove it first to avoid conflicting declarations
         inverse_relation = relation.inverse()
