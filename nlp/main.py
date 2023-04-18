@@ -1,6 +1,7 @@
 import spacy
 import sys
 from spacy import displacy
+#from textblob import TextBlob, Sentence
 from typing import Dict, List
 
 
@@ -53,9 +54,14 @@ def main():
     while True:
         text = input("# ")
         if text.lower() == "q!":
+            print("(!) Bye bye!")
             break
         if len(text.strip()) == 0:
             continue
+
+        # don't ask why
+        if text.lower().startswith("does"):
+            text = text[0].upper() + text[1:]
 
         # Do stuff with text
         doc = nlp(text)
@@ -169,8 +175,8 @@ def main():
 def query_knowledge(user:str, doc, kb: KnowledgeBase):
     bool_query = False
     
-    # for token in doc:
-    #     print(token, token.pos_, list(token.children), token.dep_)
+    #for token in doc:
+    #    print(token, token.pos_, list(token.children), token.dep_)
     
     root = [token for token in doc if token.head == token][0]
     
@@ -188,46 +194,58 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
             entity2 = [token for token in nsubject.children if token.dep_ == "amod"][0]
         else:
             nsubject = root
-            rel = [token for token in root.children if token.dep_ == "prep"][0]
+            rel = [token for token in doc if token.dep_ == "prep"][0]
             entity2 = [token for token in rel.children if token.dep_ == "pobj"][0]
         
         # print(f"Question triplet: {nsubject}, {rel}, {entity2}")
 
-        query = query_boolean(nsubject, rel, entity2, kb, relation_negated)
+        ent1 = extract_entity(Entity(root), nsubject, [])
+        ent2 = extract_entity(Entity(entity2), entity2, [])
 
-        return (nsubject, rel, entity2, relation_negated, query), bool_query
+        print(f"Question triplet particular: {ent1}, {rel}, {ent2}")
+        return query_boolean(ent1, rel, ent2, kb), bool_query
     
     nsubject = possible_subjects[0]
 
     # Verify possessives
     possessives = [child for child in nsubject.children if child.dep_ == "poss"]
 
+    #print(nsubject)
+    #print(possessives)
+    #print("Full entity:", extract_entity(Entity(nsubject), nsubject, []))
+
+
     # base entities and rel
-    entity1 = possessives[0] if possessives else nsubject # TODO change to get object ("Diogo's dog" is returning only "dog")
+    #entity1 = possessives[0] if possessives else nsubject # TODO change to get object ("Diogo's dog" is returning only "dog")
+    entity1 = nsubject
     rel = nsubject if possessives else root.lemma_
     entity2 = [child for child in root.children if child.dep_ == "dobj" and child.pos_.lower() != "pron"]
 
+    relation_negated = 'neg' in [child.dep_ for child in root.children]
+
+
     # Not a boolean question
     if len(entity2) == 0:
-    
-        # entity2 = build_entity(nobj) entity 2 only for boolean questions maybe?
         
+        ent = str(extract_entity(Entity(entity1), nsubject, []))
+        rel = root.lemma_
+
+        print(f"Question dupla: {ent}, {rel}")
         
-        # kb_type = RelType.INHERITS if str(rel) == "is" else RelType.OTHER
-        
-        # print(f"Question dupla: {nsubject}, {rel}")
-        
-        
-        query = kb.query_inheritance_relation(str(entity1), str(rel))
+        query = kb.query_inheritance_relation(ent, str(rel))
+        print(query)
         
         return (entity1, rel, query), bool_query
     else:
-        # print(f"Question tripla bool: {nsubject}, {rel}, {entity2}")
+        ent1 = extract_entity(Entity(entity1), nsubject, [])
+        ent2 = extract_entity(Entity(entity2[0]), nsubject, [])
+
+        print(f"Question tripla bool: {ent1}, {rel}, {ent2}")
         
         query = query_boolean(entity1, rel, entity2[0], kb, relation_negated)
 
         # TODO: shouldn't bool_query be True here?
-        return (entity1, rel, entity2[0], relation_negated, query), True
+        return (ent1, rel, ent2, relation_negated, query), True
             
 
 def query_boolean(ent1, rel, ent2, kb:KnowledgeBase, not_:bool=False):
@@ -349,6 +367,35 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
         kb.add_knowledge(user, new_relation)
 
     return knowledge
+
+
+def extract_entity(entity, subject, knowledge):
+    children = list(reversed(list(subject.children)))
+    for child in children:
+        # print(f"{child} {child.pos_} {child.dep_}")
+        if child.dep_ == "poss":
+            ent2 = copy(entity)
+            entity = entity.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
+            rel = "Instance"
+            triplet = Triples(ent1=entity, ent2=ent2, rel=rel)
+            triplet.not_ = False
+            knowledge.append(triplet)
+
+            ent1 = Entity(child)
+            ent2 = entity#.prefix(child)
+            rel = "have"
+            triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
+            triplet.not_ = False
+            knowledge.append(triplet)
+        elif child.dep_ in ["amod", "npadvmod", "nummod"]:
+            entity.prefix(child)
+            new_children = child.children
+            children.extend(new_children)
+        elif subject.dep_ == "xcomp" and child.dep_ == "dobj":
+            entity.sufix(child)
+    
+    return entity
+
 
 
 if __name__ == '__main__':

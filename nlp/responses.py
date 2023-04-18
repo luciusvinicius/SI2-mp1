@@ -12,7 +12,7 @@ def bool_response(confidence):
         choices = [
             "Most certainly correct!",
             "Exactly right.",
-            "According to most users and some trusted sources, that's correct.",
+            "According to most users and trusted sources, that's correct.",
             "Decidedly so."
         ]
     
@@ -55,7 +55,7 @@ def bool_response(confidence):
         choices = [
             "Incorrect.",
             "Not true.",
-            "According to most users and some trusted sources, that's not correct.",
+            "According to most users and trusted sources, that's not correct.",
             "Factually wrong."
         ]
 
@@ -69,17 +69,20 @@ def complex_response(content, confidence):
             "I have no idea."
         ]
     
+    print(f"{content = }")
+
     entity = content[0]
     relationship = content[1]
     if not content[2]:
         choices = [
-            f"I have no information on whether/what {entity} {relationship}, maybe you can tell us something about it?",
+            f"I have no information on what/where {entity} {relationship}, maybe you can tell us something about it?",
             "Not much info on that, maybe ask me later!",
             "I don't know much about that, I'll be sure to ask others what they think!",
         ]
     else:
         # TODO: not considering inheritance
-        target_entities = list(content[2][str(entity)][0])
+        entity = list(content[2].keys())[0]
+        target_entities = list(content[2][entity][0])
         target_entities_string = str(target_entities[0][0]) if len(target_entities) == 1 else ''.join([str(target_entities[i][0]) + ", " for i in range(len(target_entities)-1)]) + "and " + str(target_entities[-1][0])
         if confidence > 0.85:
             choices = [
