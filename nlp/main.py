@@ -202,8 +202,10 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         ent1 = extract_entity(Entity(root), nsubject, [])
         ent2 = extract_entity(Entity(entity2), entity2, [])
 
+        query = query_boolean(ent1, rel, ent2, kb)
+
         print(f"Question triplet particular: {ent1}, {rel}, {ent2}")
-        return query_boolean(ent1, rel, ent2, kb), bool_query
+        return (ent1, rel, ent2, relation_negated, query), bool_query
     
     nsubject = possible_subjects[0]
 
