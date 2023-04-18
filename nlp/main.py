@@ -54,6 +54,7 @@ def main():
     while True:
         text = input("# ")
         if text.lower() == "q!":
+            print("(!) Bye bye!")
             break
         if len(text.strip()) == 0:
             continue
