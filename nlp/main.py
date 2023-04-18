@@ -45,6 +45,7 @@ def main():
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
     kb.delete_all()
     confidence_table = ConfidenceTable(kb, saf_weight=0.5, nsaf_weight=0.5, base_confidence=0.8)
+    confidence_table.register_declarator('Wikipedia', static_confidence=1.0)
     nlp = init()
     print("(!) Hello, how can I help you? (q! - quit)")
     while True:
