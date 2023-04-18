@@ -175,8 +175,8 @@ def main():
 def query_knowledge(user:str, doc, kb: KnowledgeBase):
     bool_query = False
     
-    #for token in doc:
-    #    print(token, token.pos_, list(token.children), token.dep_)
+    for token in doc:
+        print(token, token.pos_, list(token.children), token.dep_)
     
     root = [token for token in doc if token.head == token][0]
     
@@ -216,11 +216,15 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
 
     relation_negated = 'neg' in [child.dep_ for child in root.children]
 
+    print("ENT2", entity2, len(entity2))
 
     # Not a boolean question
     if len(entity2) == 0:
         
         ent = str(extract_entity(Entity(entity1), nsubject, []))
+        print(ent, nsubject, nsubject.pos_, nsubject.text)
+        if nsubject.pos_ == "PROPN" and ent.lower() == nsubject.text.lower():
+            ent = ent.capitalize()
         rel = root.lemma_
 
         print(f"Question dupla: {ent}, {rel}")
@@ -230,12 +234,18 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         
         return (entity1, rel, query), bool_query
     else:
-        ent1 = extract_entity(Entity(entity1), nsubject, [])
-        ent2 = extract_entity(Entity(entity2[0]), nsubject, [])
-
+        ent1 = str(extract_entity(Entity(entity1), nsubject, []))
+        ent2 = str(extract_entity(Entity(entity2[0]), nsubject, []))
+        print("B4")
+        if nsubject.pos_ == "PROPN" and ent1.lower() == nsubject.text.lower():
+            ent1 = ent1.capitalize()
+        print("A")
+        if nsubject.pos_ == "PROPN" and ent2.lower() == nsubject.text.lower():
+            ent2 = ent2.capitalize()
+        print("B")
         print(f"Question tripla bool: {ent1}, {rel}, {ent2}")
         
-        query = query_boolean(entity1, rel, entity2[0], kb, relation_negated)
+        query = query_boolean(ent1, rel, ent2, kb, relation_negated)
 
         # TODO: shouldn't bool_query be True here?
         return (ent1, rel, ent2, relation_negated, query), True
