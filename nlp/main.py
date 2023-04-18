@@ -37,9 +37,6 @@ def build_entity(token) -> str:
         
     return output
 
-def get_entity_type(token) -> EntityType:
-    return EntityType.INSTANCE if token.pos_ == "PROPN" else EntityType.TYPE
-
 
 def main():
     user = input("Please insert your username: ")
@@ -67,7 +64,7 @@ def main():
         doc = nlp(text)
 
         # --------- DEBUG: SHOW TREE ---------
-        displacy.serve(doc, auto_select_port=True, style="dep")
+        # displacy.serve(doc, auto_select_port=True, style="dep")
 
         # Check if phrase is a question or not
         
@@ -220,7 +217,8 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     # base entities and rel
     #entity1 = possessives[0] if possessives else nsubject # TODO change to get object ("Diogo's dog" is returning only "dog")
     entity1 = nsubject
-    rel = nsubject if possessives else root.lemma_
+    # rel = nsubject if possessives else root.lemma_
+    rel = root.lemma_
     entity2 = [child for child in root.children if child.dep_ == "dobj" and child.pos_.lower() != "pron"]
 
     relation_negated = 'neg' in [child.dep_ for child in root.children]
@@ -234,7 +232,6 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         print(ent, nsubject, nsubject.pos_, nsubject.text)
         if nsubject.pos_ == "PROPN" and ent.lower() == nsubject.text.lower():
             ent = ent.capitalize()
-        rel = root.lemma_
 
         print(f"Question dupla: {ent}, {rel}")
         
@@ -244,7 +241,7 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         return (entity1, rel, query), bool_query
     else:
         ent1 = str(extract_entity(Entity(entity1), nsubject, []))
-        ent2 = str(extract_entity(Entity(entity2[0]), nsubject, []))
+        ent2 = str(extract_entity(Entity(entity2[0]), entity2[0], []))
         print("B4")
         if nsubject.pos_ == "PROPN" and ent1.lower() == nsubject.text.lower():
             ent1 = ent1.capitalize()
@@ -253,7 +250,7 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
             ent2 = ent2.capitalize()
         print("B")
         print(f"Question tripla bool: {ent1}, {rel}, {ent2}")
-        
+
         query = query_boolean(ent1, rel, ent2, kb, relation_negated)
 
         # TODO: shouldn't bool_query be True here?
@@ -320,6 +317,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
         if child.dep_ == "poss":
             ent2 = copy(entity1)
             entity1 = entity1.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
+            entity1.type_ = EntityType.INSTANCE
             rel = "Instance"
             triplet = Triples(ent1=entity1, ent2=ent2, rel=rel)
             triplet.not_ = False
@@ -371,11 +369,10 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     for k in knowledge:
         # print(k)
         kb_type = RelType.INHERITS if str(k.rel) in ["be", "Instance"] else RelType.OTHER
-        ent1_type = get_entity_type(k.ent1)
-        ent2_type = get_entity_type(k.ent2)
         
         # TODO: lowercase entity names if they are TYPEs? ('Beans' and 'beans' will be different)
-        new_relation = Relation(str(k.ent1), ent1_type, str(k.ent2).strip(), ent2_type, str(k.rel), kb_type, not_=k.not_)
+        new_relation = Relation(str(k.ent1), k.ent1.type_, str(k.ent2).strip(), k.ent2.type_, str(k.rel), kb_type, not_=k.not_)
+        print(new_relation)
         kb.add_knowledge(user, new_relation)
 
     return knowledge
