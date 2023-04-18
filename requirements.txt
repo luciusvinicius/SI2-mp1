@@ -1,3 +1,4 @@
 spacy
+textblob
 neo4j
 pytest

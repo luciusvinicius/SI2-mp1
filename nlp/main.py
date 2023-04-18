@@ -1,7 +1,6 @@
 import spacy
-import sys
 from spacy import displacy
-#from textblob import TextBlob, Sentence
+from textblob import Word
 from typing import Dict, List
 
 
@@ -86,7 +85,8 @@ def main():
                 #print(knowledge)
                 confidence_table.register_declarator(user)
                 confidence_table.update_confidences()
-        except:
+        except Exception as e:
+            #print(e)
             print("Sorry, I didn't understand that. Maybe try rephrasing your sentence?")
         else:
             # Output text based on stuff that was done
@@ -230,7 +230,7 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     # Not a boolean question
     if len(entity2) == 0:
         
-        ent = str(extract_entity(Entity(entity1), nsubject, []))
+        ent = extract_entity(Entity(entity1), nsubject, [])
         # print(ent, nsubject, nsubject.pos_, nsubject.text)
         if nsubject.pos_ == "PROPN" and ent.lower() == nsubject.text.lower():
             ent = ent.capitalize()
@@ -242,8 +242,8 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         
         return (entity1, rel, query, ent), bool_query
     else:
-        ent1 = str(extract_entity(Entity(entity1), nsubject, []))
-        ent2 = str(extract_entity(Entity(entity2[0]), entity2[0], []))
+        ent1 = extract_entity(Entity(entity1), nsubject, [])
+        ent2 = extract_entity(Entity(entity2[0]), entity2[0], [])
         #print("B4")
         if nsubject.pos_ == "PROPN" and ent1.lower() == nsubject.text.lower():
             ent1 = ent1.capitalize()
@@ -372,8 +372,17 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
         # print(k)
         kb_type = RelType.INHERITS if str(k.rel) in ["be", "Instance"] else RelType.OTHER
         
+        # singularize simple entities
+        new_ent1 = str(k.ent1)
+        if len(new_ent1.split(" ")) == 1:
+            new_ent1 = Word(new_ent1).singularize()
+        new_ent2 = str(k.ent2)
+        if len(new_ent2.split(" ")) == 1:
+            new_ent2 = Word(new_ent2).singularize()
+
+
         # TODO: lowercase entity names if they are TYPEs? ('Beans' and 'beans' will be different)
-        new_relation = Relation(str(k.ent1), k.ent1.type_, str(k.ent2).strip(), k.ent2.type_, str(k.rel), kb_type, not_=k.not_)
+        new_relation = Relation(new_ent1, k.ent1.type_, new_ent2.strip(), k.ent2.type_, str(k.rel), kb_type, not_=k.not_)
         #print(new_relation)
         kb.add_knowledge(user, new_relation)
 
@@ -405,7 +414,10 @@ def extract_entity(entity, subject, knowledge):
         elif subject.dep_ == "xcomp" and child.dep_ == "dobj":
             entity.sufix(child)
     
-    return entity
+    entity_str = str(entity)
+    if len(entity_str.split(" ")) == 1:
+        return Word(entity_str).singularize()
+    return str(entity)
 
 
 

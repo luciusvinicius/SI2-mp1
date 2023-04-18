@@ -7,6 +7,7 @@ Python 3.10 is required to run this project.
 ```
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
+python -m textblob.download_corpora
 ```
 
 ## Run neo4j container with docker
