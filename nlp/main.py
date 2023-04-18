@@ -317,7 +317,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
         if child.dep_ == "poss":
             ent2 = copy(entity1)
             entity1 = entity1.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
-            entity1.type_ = EntityType.INSTANCE
+            entity1.type_ = EntityType.INSTANCE if child.pos_ == 'PROPN' else EntityType.TYPE
             rel = "Instance"
             triplet = Triples(ent1=entity1, ent2=ent2, rel=rel)
             triplet.not_ = False
