@@ -87,44 +87,75 @@ def main():
             # Output text based on stuff that was done
             if respond_to_query:
                 if bool_query:
-                    entity1, rel, entity2, negated, result = content
-                    relation = Relation(
+                    confidence = 0
+                    confidence_n = 0
+                    entity1, rel, entity2, negated, query = content
+                    
+                    # We can perform these boolean queries in two ways:
+                    # - Unknown -> then it's False: if no declarations are present, then include inverse relations
+                    # - Unknown -> conclude nothing: if no declarations are present, then don't bother with inverse relations
+                    # For instance, if we say "person doesn't like beans" and ask "does person like beans?" we will get "No" and "Don't know" respectively.
+                    # The code below, which includes the results from the inverse query, implements the first case.
+                    inverse_query = kb.assert_relation_inheritance(Relation(
                         ent1=str(entity1),
                         ent1_type=None,
                         ent2=str(entity2),
                         ent2_type=None,
                         name=str(rel),
                         type_=None,
-                        not_=negated
-                    )
+                        not_=not negated
+                    ))
+
+                    for (entity1_parent, length) in (query | inverse_query):
+                        relation = Relation(
+                            ent1=str(entity1_parent),
+                            ent1_type=None,
+                            ent2=str(entity2),
+                            ent2_type=None,
+                            name=str(rel),
+                            type_=None,
+                            not_=negated
+                        )
                     
-                    # We completely trust the user if they are asking about something that they declared
-                    if kb.assert_relation_inheritance(relation, declarator=user):
-                        confidence = 1.0
-                    else:
-                        # TODO: missing inheritance :/
-                        confidence = confidence_table.get_relation_confidence(relation)
-                    response = bool_response(result, confidence)
+                        # We completely trust the user if they are asking about something that they declared
+                        if kb.assert_relation(relation, declarator=user):
+                            # If it was a local assertion, then we have complete confidence
+                            if length == 0:
+                                confidence = 1.0
+                                confidence_n = 1
+                                break
+                            else:
+                                confidence += 1.0
+                        else:
+                            confidence += confidence_table.get_relation_confidence(relation)
+                        confidence_n += 1
+
+                    response = bool_response(confidence / confidence_n if confidence_n > 0 else None)
 
                 else:
                     confidence = 0
                     confidence_n = 0
                     rel = content[1]
-                    # TODO: maybe use 'length'? less confidence if farther away?
                     for entity1, (entity2s, length) in content[2].items():
                         for entity2, positive in entity2s:
-                            confidence += confidence_table.get_relation_confidence(Relation(
-                                ent1=entity1,
-                                ent1_type=None,
-                                ent2=entity2,
-                                ent2_type=None,
-                                name=rel,
-                                type_=None,
-                                not_=not positive
-                            ))
+                            relation = Relation(
+                                    ent1=entity1,
+                                    ent1_type=None,
+                                    ent2=entity2,
+                                    ent2_type=None,
+                                    name=rel,
+                                    type_=None,
+                                    not_=not positive
+                                )
+                            
+                            # We completely trust the user if they are asking about something that they declared
+                            if kb.assert_relation(relation, declarator=user):
+                                confidence += 1.0
+                            else:
+                                confidence += confidence_table.get_relation_confidence(relation)
                             confidence_n += 1
 
-                    response = complex_response(content, confidence / confidence_n)
+                    response = complex_response(content, confidence / confidence_n if confidence_n > 0 else None)
             else:
                 response = new_knowledge_response()
             print(response)
@@ -191,7 +222,7 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         query = query_boolean(entity1, rel, entity2[0], kb, relation_negated)
 
         # TODO: shouldn't bool_query be True here?
-        return (entity1, rel, entity2[0], relation_negated, query), bool_query
+        return (entity1, rel, entity2[0], relation_negated, query), True
             
 
 def query_boolean(ent1, rel, ent2, kb:KnowledgeBase, not_:bool=False):

@@ -249,26 +249,35 @@ class KnowledgeBase:
 
     @sn_read
     @staticmethod
-    def assert_relation(relation: Relation, tx: ManagedTransaction=None) -> bool:
+    def assert_relation(relation: Relation, declarator: str=None, tx: ManagedTransaction=None) -> bool:
         """Assert whether or not `relation` exists in the knowledge base"""
-        return KnowledgeBase._tx_assert_relation_exists(relation, tx)
+        return KnowledgeBase._tx_assert_relation_exists(relation, tx, declarator)
 
     @sn_read
     @staticmethod
-    def assert_relation_inheritance(relation: Relation, declarator: str=None, tx: ManagedTransaction=None) -> bool:
+    def assert_relation_inheritance(relation: Relation, declarator: str=None, tx: ManagedTransaction=None) -> Set[Tuple[str, int]]:
         """Assert whether or not `relation` exists in the knowledge base, with inheritance"""
 
         e1_label, e2_label, rel_label = KnowledgeBase._return_optional_labels(relation)
         declarator_filter = f", declarator: '{declarator}'" if declarator is not None else ""
 
         results = tx.run(
-            f"RETURN exists(({e1_label} {{name: $ent1}})-[{rel_label} {{name: $relation, not: $not_ {declarator_filter}}}]->({e2_label} {{name: $ent2}})) AS relation_exists "
-            "UNION ALL "
-            f"MATCH (e1{e1_label} {{name: $ent1}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
-            f"RETURN exists((ascn)-[{rel_label} {{name: $relation, not: $not_}}]->({e2_label} {{name: $ent2}})) AS relation_exists", ent1=relation.ent1, ent2=relation.ent2, relation=relation.name, not_=relation.not_
+            f"MATCH (ent1{e1_label} {{name:$ent1}})-[r{rel_label} {{name:$relation, not: $not_ {declarator_filter}}}]->(ent2{e2_label} {{name: $ent2}}) "
+            "RETURN ent1.name AS subject, 0 AS distance "
+            "UNION "
+            f"MATCH p = (ent1{e1_label} {{name:$ent1}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
+            f"MATCH (ascn)-[r {{name:$relation, not: $not_ {declarator_filter}}}]->(ent2{e2_label} {{name: $ent2}}) "
+            "RETURN ascn.name AS subject, length(p) AS distance", ent1=relation.ent1, ent2=relation.ent2, relation=relation.name, not_=relation.not_
         )
 
-        return any(result.value("relation_exists") for result in results)
+        # results = tx.run(
+        #     f"RETURN exists(({e1_label} {{name: $ent1}})-[{rel_label} {{name: $relation, not: $not_ {declarator_filter}}}]->({e2_label} {{name: $ent2}})) AS relation_exists "
+        #     "UNION ALL "
+        #     f"MATCH (e1{e1_label} {{name: $ent1}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
+        #     f"RETURN exists((ascn)-[{rel_label} {{name: $relation, not: $not_ {declarator_filter}}}]->({e2_label} {{name: $ent2}})) AS relation_exists", ent1=relation.ent1, ent2=relation.ent2, relation=relation.name, not_=relation.not_
+        # )
+
+        return {(result.value("subject"), result.value("distance")) for result in results}
 
     @sn_read
     @staticmethod
@@ -287,9 +296,10 @@ class KnowledgeBase:
         return result.single()
     
     @staticmethod
-    def _tx_assert_relation_exists(relation: Relation, tx: ManagedTransaction) -> bool:
+    def _tx_assert_relation_exists(relation: Relation, tx: ManagedTransaction, declarator: str=None) -> bool:
         e1_label, e2_label, rel_label = KnowledgeBase._return_optional_labels(relation)
-        results = tx.run(f"RETURN exists(({e1_label} {{name: $ent1}})-[{rel_label} {{name: $relation, not: $not_}}]->({e2_label} {{name: $ent2}})) AS relation_exists", ent1=relation.ent1, relation=relation.name, not_=relation.not_, ent2=relation.ent2)
+        declarator_filter = f", declarator: '{declarator}'" if declarator is not None else ""
+        results = tx.run(f"RETURN exists(({e1_label} {{name: $ent1}})-[{rel_label} {{name: $relation, not: $not_ {declarator_filter}}}]->({e2_label} {{name: $ent2}})) AS relation_exists", ent1=relation.ent1, relation=relation.name, not_=relation.not_, ent2=relation.ent2)
         return results.single().value("relation_exists")
 
     @staticmethod

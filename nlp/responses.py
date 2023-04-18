@@ -1,57 +1,74 @@
 import random
 
-def bool_response(value, confidence):
+def bool_response(confidence):
+    if confidence is None:
+        choices = [
+            "I have no information regarding that.",
+            "I don't know anything about that.",
+            "I have no idea."
+        ]
+
+    elif confidence > 0.85:
+        choices = [
+            "Most certainly correct!",
+            "Exactly right.",
+            "According to most users and some trusted sources, that's correct.",
+            "Decidedly so."
+        ]
+    
+    elif confidence > 0.7:
+        choices = [
+            "The data seems to indicate so.",
+            "Apparently so.",
+            "According to some users, that's correct."
+        ]
+    
+    elif confidence > 0.6:
+        choices = [
+            "With some degree of uncertainty, yes.",
+            "As far as my knowledge goes, that's correct, but I need more data to be sure.",
+            "Some users have previously confirmed that, but more input is needed."
+        ]
+
+    elif confidence > 0.4:
+        choices = [
+            "I'm not sure at all.",
+            "I can't be certain about that.",
+            "Maybe, maybe not."
+        ]
+
+    elif confidence > 0.3:
+        choices = [
+            "Hard to be sure, but that doesn't seem to be correct.",
+            "As far as my knowledge goes, that's incorrect, but I need more data to be sure.",
+            "Some users have previously denied that, but more input is needed."
+        ]
+
+    elif confidence > 0.15:
+        choices = [
+            "The data seems to indicate not.",
+            "Apparently that's not right.",
+            "According to some users, that's incorrect."
+        ]
+
+    else:
+        choices = [
+            "Incorrect.",
+            "Not true.",
+            "According to most users and some trusted sources, that's not correct.",
+            "Factually wrong."
+        ]
+
+    return random.choice(choices)
+    
+def complex_response(content, confidence):
     if confidence is None:
         choices = [
             "I have no information regarding that.",
             "I don't know anything about that."
             "I have no idea."
         ]
-
-    elif confidence > 0.85:
-        if value:
-            choices = [
-                "Most certainly correct!",
-                "Exactly right.",
-                "According to most users and some trusted sources, that's correct.",
-                "Decidedly so."
-            ]
-        else:
-            choices = [
-                "Incorrect.",
-                "Not true.",
-                "According to most users and some trusted sources, that's not correct.",
-                "Factually wrong."
-            ]
-    elif confidence > 0.6:
-        if value:
-            choices = [
-                "The data seems to indicate so.",
-                "Apparently so.",
-                "According to some users, that's correct."
-            ]
-        else:
-            choices = [
-                "The data seems to indicate not.",
-                "Apparently that's not right.",
-                "According to some users, that's incorrect."
-            ]
-    else:
-        if value:
-            choices = [
-                "With some degree of uncertainty, yes.",
-                "As far as my knowledge goes, that's correct, but I need more data to be sure.",
-                "Some users have previously confirmed that, but more input is needed."
-            ]
-        else:
-            choices = [
-                "Hard to be sure, but that doesn't seem to be correct.",
-                "As far as my knowledge goes, that's incorrect, but I need more data to be sure.",
-                "Some users have previously denied that, but more input is needed."
-            ]
-    return random.choice(choices)
     
-def complex_response(content, confidence):
     entity = content[0]
     relationship = content[1]
     if not content[2]:
