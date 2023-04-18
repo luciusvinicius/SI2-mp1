@@ -60,7 +60,7 @@ def test_question1(user, nlp, data1):
     
     kb = data1
     
-    ent1, relation, query = query_knowledge(user, doc, kb)
+    (ent1, relation, query), _ = query_knowledge(user, doc, kb)
     
     assert output == (str(ent1), str(relation), query)
 
@@ -73,8 +73,10 @@ def test_question2(user, nlp, data1):
     output = False
     
     kb = data1
-        
-    assert output == query_knowledge(user, doc, kb)
+    
+    (ent1, relation, ent2, negated, query), _ = query_knowledge(user, doc, kb)
+
+    assert output == query
 
 # def test_question3(user, nlp, data1):
 #     """ TEST: What does Diogo's dog like? """

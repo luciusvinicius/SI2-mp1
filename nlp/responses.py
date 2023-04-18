@@ -1,7 +1,7 @@
 import random
 
 def bool_response(value, confidence):
-    if confidence > 85:
+    if confidence > 0.85:
         if value:
             choices = [
                 "Most certainly correct!",
@@ -16,7 +16,7 @@ def bool_response(value, confidence):
                 "According to most users and some trusted sources, that's not correct.",
                 "Factually wrong."
             ]
-    elif confidence > 60:
+    elif confidence > 0.6:
         if value:
             choices = [
                 "The data seems to indicate so.",
@@ -54,15 +54,16 @@ def complex_response(content, confidence):
             "I don't know much about that, I'll be sure to ask others what they think!",
         ]
     else:
+        # TODO: not considering inheritance
         target_entities = list(content[2][str(entity)][0])
         target_entities_string = str(target_entities[0][0]) if len(target_entities) == 1 else ''.join([str(target_entities[i][0]) + ", " for i in range(len(target_entities)-1)]) + "and " + str(target_entities[-1][0])
-        if confidence > 85:
+        if confidence > 0.85:
             choices = [
                 f"I am quite sure {entity} does {relationship} {target_entities_string}.",
                 f"Overwhelmingly, our sources indicate {entity} does {relationship} {target_entities_string}.",
                 f"Most users affirm {entity} does {relationship} {target_entities_string}."
             ]
-        elif confidence > 60:
+        elif confidence > 0.6:
             choices = [
                 f"My knowledge seem to indicate {entity} does {relationship} {target_entities_string}.",
                 f"Apparently {entity} does {relationship} {target_entities_string}.",

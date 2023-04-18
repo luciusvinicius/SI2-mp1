@@ -44,7 +44,7 @@ def main():
     user = input("Please insert your username: ")
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
     kb.delete_all()
-    confidence_table = ConfidenceTable(kb, saf_weight=0.5, nsaf_weight=0.5, base_confidence=0.5)
+    confidence_table = ConfidenceTable(kb, saf_weight=0.5, nsaf_weight=0.5, base_confidence=0.8)
     nlp = init()
     print("(!) Hello, how can I help you? (q! - quit)")
     while True:
@@ -72,7 +72,6 @@ def main():
             if word[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
                 content, bool_query = query_knowledge(user, doc, kb)
                 #print(content)
-                # confidence_table.get_relation_confidence(Relation())
             else:
                 respond_to_query = False
                 knowledge = add_knowledge(user, doc, kb)
@@ -85,9 +84,37 @@ def main():
             # Output text based on stuff that was done
             if respond_to_query:
                 if bool_query:
-                    response = bool_response(content, 100)
+                    entity1, rel, entity2, negated, result = content
+                    confidence = confidence_table.get_relation_confidence(Relation(
+                        ent1=entity1,
+                        ent1_type=None,
+                        ent2=entity2,
+                        ent2_type=None,
+                        name=rel,
+                        type_=None,
+                        not_=negated
+                    ))
+
+                    response = bool_response(result, confidence)
                 else:
-                    response = complex_response(content, 100)
+                    confidence = 0
+                    confidence_n = 0
+                    rel = content[1]
+                    # TODO: maybe use 'length'? less confidence if farther away?
+                    for entity1, (entity2s, length) in content[2].items():
+                        for entity2, positive in entity2s:
+                            confidence += confidence_table.get_relation_confidence(Relation(
+                                ent1=entity1,
+                                ent1_type=None,
+                                ent2=entity2,
+                                ent2_type=None,
+                                name=rel,
+                                type_=None,
+                                not_=not positive
+                            ))
+                            confidence_n += 1
+
+                    response = complex_response(content, confidence / confidence_n)
             else:
                 response = new_knowledge_response()
             print(response)
@@ -108,6 +135,8 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     
     possible_subjects = [token for token in root.children if token.dep_ == "nsubj"] # What Diogo likes VS What does Diogo likes
     
+    relation_negated = 'neg' in [child.dep_ for child in root.children]
+
     # Boolean question specific use cases (that for some reason treats "like" as preposition)
     # e.g.: "Does Diogo like rice?"
     if len(possible_subjects) == 0:
@@ -117,7 +146,10 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         entity2 = [token for token in rel.children if token.dep_ == "pobj"][0]
         
         # print(f"Question triplet: {nsubject}, {rel}, {entity2}")
-        return query_boolean(nsubject, rel, entity2, kb), bool_query
+
+        query = query_boolean(nsubject, rel, entity2, kb, relation_negated)
+
+        return (nsubject, rel, entity2, relation_negated, query), bool_query
     
     nsubject = possible_subjects[0]
 
@@ -128,8 +160,6 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     entity1 = possessives[0] if possessives else nsubject # TODO change to get object ("Diogo's dog" is returning only "dog")
     rel = nsubject if possessives else root.lemma_
     entity2 = [child for child in root.children if child.dep_ == "dobj" and child.pos_.lower() != "pron"]
-
-    relation_negated = 'neg' in [child.dep_ for child in root.children]
 
     # Not a boolean question
     if len(entity2) == 0:
@@ -148,7 +178,10 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     else:
         # print(f"Question tripla bool: {nsubject}, {rel}, {entity2}")
         
-        return query_boolean(entity1, rel, entity2[0], kb, relation_negated), bool_query
+        query = query_boolean(entity1, rel, entity2[0], kb, relation_negated)
+
+        # TODO: shouldn't bool_query be True here?
+        return (entity1, rel, entity2[0], relation_negated, query), bool_query
             
 
 def query_boolean(ent1, rel, ent2, kb:KnowledgeBase, not_:bool=False):
@@ -183,6 +216,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     nsubject = list(root.lefts)[0] # Está na documentação -- Lucius. Mentirosos >:(
 
     # Verify possessives
+    # TODO: possessives not used
     possessives = [child for child in nsubject.children if child.dep_ == "poss"]
     adp = [child for child in root.children if child.pos_ == "ADP"]
     # base entities and rel
@@ -264,6 +298,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
         ent1_type = get_entity_type(k.ent1)
         ent2_type = get_entity_type(k.ent2)
         
+        # TODO: lowercase entity names if they are TYPEs? ('Beans' and 'beans' will be different)
         new_relation = Relation(str(k.ent1), ent1_type, str(k.ent2).strip(), ent2_type, str(k.rel), kb_type, not_=k.not_)
         kb.add_knowledge(user, new_relation)
 
