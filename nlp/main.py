@@ -44,8 +44,11 @@ def get_entity_type(token) -> EntityType:
 def main():
     user = input("Please insert your username: ")
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
-    kb.delete_all()
-    confidence_table = ConfidenceTable(kb, saf_weight=0.5, nsaf_weight=0.5, base_confidence=0.5)
+    # kb.delete_all()
+    confidence_table = ConfidenceTable(kb, saf_weight=0.5, nsaf_weight=0.5, base_confidence=0.8)
+    confidence_table.register_declarator('Wikipedia', static_confidence=1.0)
+    for declarator in kb.get_all_declarators():
+        confidence_table.register_declarator(declarator)
     nlp = init()
     print("(!) Hello, how can I help you? (q! - quit)")
     while True:
@@ -73,29 +76,94 @@ def main():
 
         respond_to_query = True
         
-        # try:
-        if word[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
-            content, bool_query = query_knowledge(user, doc, kb)
-            #print(content)
-            # confidence_table.get_relation_confidence(Relation())
-        else:
-            respond_to_query = False
-            knowledge = add_knowledge(user, doc, kb)
-            print(knowledge)
-            confidence_table.register_declarator(user)
-            confidence_table.update_confidences()
-        # except:
-        #     print("Sorry, I didn't understand that. Maybe try rephrasing your sentence?")
-        # else:
-            # Output text based on stuff that was done
-        if respond_to_query:
-            if bool_query:
-                response = bool_response(content, 100)
+        try:
+            if word[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
+                content, bool_query = query_knowledge(user, doc, kb)
+                #print(content)
             else:
-                response = complex_response(content, 100)
+                respond_to_query = False
+                knowledge = add_knowledge(user, doc, kb)
+                #print(knowledge)
+                confidence_table.register_declarator(user)
+                confidence_table.update_confidences()
+        except:
+            print("Sorry, I didn't understand that. Maybe try rephrasing your sentence?")
         else:
-            response = new_knowledge_response()
-        print(response)
+            # Output text based on stuff that was done
+            if respond_to_query:
+                if bool_query:
+                    confidence = 0
+                    confidence_n = 0
+                    entity1, rel, entity2, negated, query = content
+                    
+                    # We can perform these boolean queries in two ways:
+                    # - Unknown -> then it's False: if no declarations are present, then include inverse relations
+                    # - Unknown -> conclude nothing: if no declarations are present, then don't bother with inverse relations
+                    # For instance, if we say "person doesn't like beans" and ask "does person like beans?" we will get "No" and "Don't know" respectively.
+                    # The code below, which includes the results from the inverse query, implements the first case.
+                    inverse_query = kb.assert_relation_inheritance(Relation(
+                        ent1=str(entity1),
+                        ent1_type=None,
+                        ent2=str(entity2),
+                        ent2_type=None,
+                        name=str(rel),
+                        type_=None,
+                        not_=not negated
+                    ))
+
+                    for (entity1_parent, length) in (query | inverse_query):
+                        relation = Relation(
+                            ent1=str(entity1_parent),
+                            ent1_type=None,
+                            ent2=str(entity2),
+                            ent2_type=None,
+                            name=str(rel),
+                            type_=None,
+                            not_=negated
+                        )
+                    
+                        # We completely trust the user if they are asking about something that they declared
+                        if kb.assert_relation(relation, declarator=user):
+                            # If it was a local assertion, then we have complete confidence
+                            if length == 0:
+                                confidence = 1.0
+                                confidence_n = 1
+                                break
+                            else:
+                                confidence += 1.0
+                        else:
+                            confidence += confidence_table.get_relation_confidence(relation)
+                        confidence_n += 1
+
+                    response = bool_response(confidence / confidence_n if confidence_n > 0 else None)
+
+                else:
+                    confidence = 0
+                    confidence_n = 0
+                    rel = content[1]
+                    for entity1, (entity2s, length) in content[2].items():
+                        for entity2, positive in entity2s:
+                            relation = Relation(
+                                    ent1=entity1,
+                                    ent1_type=None,
+                                    ent2=entity2,
+                                    ent2_type=None,
+                                    name=rel,
+                                    type_=None,
+                                    not_=not positive
+                                )
+                            
+                            # We completely trust the user if they are asking about something that they declared
+                            if kb.assert_relation(relation, declarator=user):
+                                confidence += 1.0
+                            else:
+                                confidence += confidence_table.get_relation_confidence(relation)
+                            confidence_n += 1
+
+                    response = complex_response(content, confidence / confidence_n if confidence_n > 0 else None)
+            else:
+                response = new_knowledge_response()
+            print(response)
         
 # What Diogo like?
 # What does Diogo like?
@@ -106,13 +174,15 @@ def main():
 def query_knowledge(user:str, doc, kb: KnowledgeBase):
     bool_query = False
     
-    for token in doc:
-        print(token, token.pos_, list(token.children), token.dep_)
+    #for token in doc:
+    #    print(token, token.pos_, list(token.children), token.dep_)
     
     root = [token for token in doc if token.head == token][0]
     
     possible_subjects = [token for token in root.children if token.dep_ == "nsubj"] # What Diogo likes VS What does Diogo likes
     
+    relation_negated = 'neg' in [child.dep_ for child in root.children]
+
     # Boolean question specific use cases (that for some reason treats "like" as preposition)
     # e.g.: "Does Diogo like rice?"
     if len(possible_subjects) == 0:
@@ -164,7 +234,10 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
 
         print(f"Question tripla bool: {ent1}, {rel}, {ent2}")
         
-        return query_boolean(ent1, rel, ent2, kb, relation_negated), bool_query
+        query = query_boolean(entity1, rel, entity2[0], kb, relation_negated)
+
+        # TODO: shouldn't bool_query be True here?
+        return (ent1, rel, ent2, relation_negated, query), True
             
 
 def query_boolean(ent1, rel, ent2, kb:KnowledgeBase, not_:bool=False):
@@ -199,6 +272,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     nsubject = list(root.lefts)[0] # Está na documentação -- Lucius. Mentirosos >:(
 
     # Verify possessives
+    # TODO: possessives not used
     possessives = [child for child in nsubject.children if child.dep_ == "poss"]
     adp = [child for child in root.children if child.pos_ == "ADP"]
     # base entities and rel
@@ -280,6 +354,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
         ent1_type = get_entity_type(k.ent1)
         ent2_type = get_entity_type(k.ent2)
         
+        # TODO: lowercase entity names if they are TYPEs? ('Beans' and 'beans' will be different)
         new_relation = Relation(str(k.ent1), ent1_type, str(k.ent2).strip(), ent2_type, str(k.rel), kb_type, not_=k.not_)
         kb.add_knowledge(user, new_relation)
 

@@ -1,50 +1,74 @@
 import random
 
-def bool_response(value, confidence):
-    if confidence > 85:
-        if value:
-            choices = [
-                "Most certainly correct!",
-                "Exactly right.",
-                "According to most users and some trusted sources, that's correct.",
-                "Decidedly so."
-            ]
-        else:
-            choices = [
-                "Incorrect.",
-                "Not true.",
-                "According to most users and some trusted sources, that's not correct.",
-                "Factually wrong."
-            ]
-    elif confidence > 60:
-        if value:
-            choices = [
-                "The data seems to indicate so.",
-                "Apparently so.",
-                "According to some users, that's correct."
-            ]
-        else:
-            choices = [
-                "The data seems to indicate not.",
-                "Apparently that's not right.",
-                "According to some users, that's incorrect."
-            ]
+def bool_response(confidence):
+    if confidence is None:
+        choices = [
+            "I have no information regarding that.",
+            "I don't know anything about that.",
+            "I have no idea."
+        ]
+
+    elif confidence > 0.85:
+        choices = [
+            "Most certainly correct!",
+            "Exactly right.",
+            "According to most users and some trusted sources, that's correct.",
+            "Decidedly so."
+        ]
+    
+    elif confidence > 0.7:
+        choices = [
+            "The data seems to indicate so.",
+            "Apparently so.",
+            "According to some users, that's correct."
+        ]
+    
+    elif confidence > 0.6:
+        choices = [
+            "With some degree of uncertainty, yes.",
+            "As far as my knowledge goes, that's correct, but I need more data to be sure.",
+            "Some users have previously confirmed that, but more input is needed."
+        ]
+
+    elif confidence > 0.4:
+        choices = [
+            "I'm not sure at all.",
+            "I can't be certain about that.",
+            "Maybe, maybe not."
+        ]
+
+    elif confidence > 0.3:
+        choices = [
+            "Hard to be sure, but that doesn't seem to be correct.",
+            "As far as my knowledge goes, that's incorrect, but I need more data to be sure.",
+            "Some users have previously denied that, but more input is needed."
+        ]
+
+    elif confidence > 0.15:
+        choices = [
+            "The data seems to indicate not.",
+            "Apparently that's not right.",
+            "According to some users, that's incorrect."
+        ]
+
     else:
-        if value:
-            choices = [
-                "With some degree of uncertainty, yes.",
-                "As far as my knowledge goes, that's correct, but I need more data to be sure.",
-                "Some users have previously confirmed that, but more input is needed."
-            ]
-        else:
-            choices = [
-                "Hard to be sure, but that doesn't seem to be correct.",
-                "As far as my knowledge goes, that's incorrect, but I need more data to be sure.",
-                "Some users have previously denied that, but more input is needed."
-            ]
+        choices = [
+            "Incorrect.",
+            "Not true.",
+            "According to most users and some trusted sources, that's not correct.",
+            "Factually wrong."
+        ]
+
     return random.choice(choices)
     
 def complex_response(content, confidence):
+    if confidence is None:
+        choices = [
+            "I have no information regarding that.",
+            "I don't know anything about that."
+            "I have no idea."
+        ]
+    
     entity = content[0]
     relationship = content[1]
     if not content[2]:
@@ -54,15 +78,16 @@ def complex_response(content, confidence):
             "I don't know much about that, I'll be sure to ask others what they think!",
         ]
     else:
+        # TODO: not considering inheritance
         target_entities = list(content[2][str(entity)][0])
         target_entities_string = str(target_entities[0][0]) if len(target_entities) == 1 else ''.join([str(target_entities[i][0]) + ", " for i in range(len(target_entities)-1)]) + "and " + str(target_entities[-1][0])
-        if confidence > 85:
+        if confidence > 0.85:
             choices = [
                 f"I am quite sure {entity} does {relationship} {target_entities_string}.",
                 f"Overwhelmingly, our sources indicate {entity} does {relationship} {target_entities_string}.",
                 f"Most users affirm {entity} does {relationship} {target_entities_string}."
             ]
-        elif confidence > 60:
+        elif confidence > 0.6:
             choices = [
                 f"My knowledge seem to indicate {entity} does {relationship} {target_entities_string}.",
                 f"Apparently {entity} does {relationship} {target_entities_string}.",

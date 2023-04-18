@@ -1,4 +1,4 @@
-from typing import Dict, Set, TYPE_CHECKING
+from typing import Dict, Set, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from kb import KnowledgeBase, Relation
@@ -98,7 +98,7 @@ class ConfidenceTable:
             self._confidences[declarator] = self._base_confidence
             self._non_static_declarators.add(declarator)
 
-    def get_relation_confidence(self, relation: 'Relation') -> float:
+    def get_relation_confidence(self, relation: 'Relation') -> Union[float, None]:
         """Obtain the confidence of the given relation based on its declarators' confidence values.
         
         The relation confidence is calculated as the maximum value between:
@@ -122,6 +122,9 @@ class ConfidenceTable:
 
         declarators = self._kb.query_declarators(relation)
         adversary_declarators = self._kb.query_declarators(relation.inverse())
+
+        if len(declarators) == 0 and len(adversary_declarators) == 0:
+            return None
 
         obtain_confidences = lambda ds, filter_ds: {self._confidences[declarator] for declarator in ds if declarator in filter_ds}
 

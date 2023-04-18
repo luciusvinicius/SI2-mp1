@@ -84,8 +84,8 @@ def test_confidence_of_bare_non_static_disagreement_at_half(initialize_knowledge
     kb: KnowledgeBase = initialize_knowledge_base
     ct: ConfidenceTable = confidence_table
 
-    relation_not = Relation("Diogo", EntityType.INSTANCE, "person", EntityType.TYPE, "is" , RelType.INHERITS, not_=True)
-    relation = Relation("Diogo", EntityType.INSTANCE, "person", EntityType.TYPE, "is", RelType.INHERITS)
+    relation_not = Relation("mammal", EntityType.TYPE, "banana", EntityType.TYPE, "eats" , RelType.OTHER, not_=True)
+    relation = Relation("mammal", EntityType.TYPE, "banana", EntityType.TYPE, "eats", RelType.OTHER)
     kb.add_knowledge("Lucius", relation_not)
     kb.add_knowledge("Diogo", relation)
 
