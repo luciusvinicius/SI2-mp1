@@ -1,3 +1,10 @@
+from sn.kb import EntityType
+
+
+def get_entity_type(token) -> EntityType:
+    return EntityType.INSTANCE if token.pos_ == "PROPN" else EntityType.TYPE
+
+
 class Triples:
     def __init__(self, ent1, ent2, rel) -> None:
         self.ent1 = ent1
@@ -18,9 +25,10 @@ class Triples:
 
     
 class Entity:
-    def __init__(self, name, pos=True) -> None:
+    def __init__(self, name, pos=True, type_=None) -> None:
         self.name = str(name)
         self.pos_ = name.pos_ if pos else None
+        self.type_ = get_entity_type(self) if type_ is None else type_
 
     def prefix(self, val):
         self.name = f"{val} {self.name}"

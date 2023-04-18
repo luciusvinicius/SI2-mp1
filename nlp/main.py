@@ -37,14 +37,11 @@ def build_entity(token) -> str:
         
     return output
 
-def get_entity_type(token) -> EntityType:
-    return EntityType.INSTANCE if token.pos_ == "PROPN" else EntityType.TYPE
-
 
 def main():
     user = input("Please insert your username: ")
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
-    kb.delete_all()
+    # kb.delete_all()
     confidence_table = ConfidenceTable(kb, saf_weight=0.5, nsaf_weight=0.5, base_confidence=0.8)
     confidence_table.register_declarator('Wikipedia', static_confidence=1.0)
     for declarator in kb.get_all_declarators():
@@ -177,8 +174,8 @@ def main():
 def query_knowledge(user:str, doc, kb: KnowledgeBase):
     bool_query = False
     
-    #for token in doc:
-    #    print(token, token.pos_, list(token.children), token.dep_)
+    # for token in doc:
+    #     print(token, token.pos_, list(token.children), token.dep_)
     
     root = [token for token in doc if token.head == token][0]
     
@@ -190,15 +187,24 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     # e.g.: "Does Diogo like rice?"
     if len(possible_subjects) == 0:
         bool_query = True
-        nsubject = root
-        rel = [token for token in doc if token.dep_ == "prep"][0]
-        entity2 = [token for token in rel.children if token.dep_ == "pobj"][0]
+        if root.lemma_ == "be":
+            nsubject = [token for token in root.children if token.dep_ == "attr"][0]
+            rel = root.lemma_
+            entity2 = [token for token in nsubject.children if token.dep_ == "amod"][0]
+        else:
+            nsubject = root
+            rel = [token for token in doc if token.dep_ == "prep"][0]
+            entity2 = [token for token in rel.children if token.dep_ == "pobj"][0]
+        
+        # print(f"Question triplet: {nsubject}, {rel}, {entity2}")
 
         ent1 = extract_entity(Entity(root), nsubject, [])
         ent2 = extract_entity(Entity(entity2), entity2, [])
 
+        query = query_boolean(ent1, rel, ent2, kb)
+
         #print(f"Question triplet particular: {ent1}, {rel}, {ent2}")
-        return query_boolean(ent1, rel, ent2, kb), bool_query
+        return (ent1, rel, ent2, relation_negated, query), bool_query
     
     nsubject = possible_subjects[0]
 
@@ -213,17 +219,21 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     # base entities and rel
     #entity1 = possessives[0] if possessives else nsubject # TODO change to get object ("Diogo's dog" is returning only "dog")
     entity1 = nsubject
-    rel = nsubject if possessives else root.lemma_
+    # rel = nsubject if possessives else root.lemma_
+    rel = root.lemma_
     entity2 = [child for child in root.children if child.dep_ == "dobj" and child.pos_.lower() != "pron"]
 
     relation_negated = 'neg' in [child.dep_ for child in root.children]
 
+    # print("ENT2", entity2, len(entity2))
 
     # Not a boolean question
     if len(entity2) == 0:
         
         ent = str(extract_entity(Entity(entity1), nsubject, []))
-        rel = root.lemma_
+        # print(ent, nsubject, nsubject.pos_, nsubject.text)
+        if nsubject.pos_ == "PROPN" and ent.lower() == nsubject.text.lower():
+            ent = ent.capitalize()
 
         #print(f"Question dupla: {ent}, {rel}")
         
@@ -232,12 +242,18 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         
         return (entity1, rel, query, ent), bool_query
     else:
-        ent1 = extract_entity(Entity(entity1), nsubject, [])
-        ent2 = extract_entity(Entity(entity2[0]), nsubject, [])
-
+        ent1 = str(extract_entity(Entity(entity1), nsubject, []))
+        ent2 = str(extract_entity(Entity(entity2[0]), entity2[0], []))
+        #print("B4")
+        if nsubject.pos_ == "PROPN" and ent1.lower() == nsubject.text.lower():
+            ent1 = ent1.capitalize()
+        #print("A")
+        if nsubject.pos_ == "PROPN" and ent2.lower() == nsubject.text.lower():
+            ent2 = ent2.capitalize()
+        #print("B")
         #print(f"Question tripla bool: {ent1}, {rel}, {ent2}")
-        
-        query = query_boolean(entity1, rel, entity2[0], kb, relation_negated)
+
+        query = query_boolean(ent1, rel, ent2, kb, relation_negated)
 
         # TODO: shouldn't bool_query be True here?
         return (ent1, rel, ent2, relation_negated, query), True
@@ -303,6 +319,7 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
         if child.dep_ == "poss":
             ent2 = copy(entity1)
             entity1 = entity1.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
+            entity1.type_ = EntityType.INSTANCE if child.pos_ == 'PROPN' else EntityType.TYPE
             rel = "Instance"
             triplet = Triples(ent1=entity1, ent2=ent2, rel=rel)
             triplet.not_ = False
@@ -354,11 +371,10 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     for k in knowledge:
         # print(k)
         kb_type = RelType.INHERITS if str(k.rel) in ["be", "Instance"] else RelType.OTHER
-        ent1_type = get_entity_type(k.ent1)
-        ent2_type = get_entity_type(k.ent2)
         
         # TODO: lowercase entity names if they are TYPEs? ('Beans' and 'beans' will be different)
-        new_relation = Relation(str(k.ent1), ent1_type, str(k.ent2).strip(), ent2_type, str(k.rel), kb_type, not_=k.not_)
+        new_relation = Relation(str(k.ent1), k.ent1.type_, str(k.ent2).strip(), k.ent2.type_, str(k.rel), kb_type, not_=k.not_)
+        #print(new_relation)
         kb.add_knowledge(user, new_relation)
 
     return knowledge
