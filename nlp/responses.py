@@ -68,10 +68,8 @@ def complex_response(content, confidence):
             "I don't know anything about that."
             "I have no idea."
         ]
-    
-    print(f"{content = }")
 
-    entity = content[0]
+    entity = content[3]
     relationship = content[1]
     if not content[2]:
         choices = [
@@ -80,10 +78,8 @@ def complex_response(content, confidence):
             "I don't know much about that, I'll be sure to ask others what they think!",
         ]
     else:
-        # TODO: not considering inheritance
-        entity = list(content[2].keys())[0]
-        target_entities = list(content[2][entity][0])
-        target_entities_string = str(target_entities[0][0]) if len(target_entities) == 1 else ''.join([str(target_entities[i][0]) + ", " for i in range(len(target_entities)-1)]) + "and " + str(target_entities[-1][0])
+        target_entities = [object for entity in content[2].keys() for object in content[2][entity][0]]
+        target_entities_string = str(target_entities[0][0]) if len(target_entities) == 1 else ''.join([("" if target_entities[i][1] else "not ") + str(target_entities[i][0]) + ", " for i in range(len(target_entities)-1)]) + "and " + str(target_entities[-1][0])
         if confidence > 0.85:
             choices = [
                 f"I am quite sure {entity} does {relationship} {target_entities_string}.",

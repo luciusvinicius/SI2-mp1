@@ -44,7 +44,7 @@ def get_entity_type(token) -> EntityType:
 def main():
     user = input("Please insert your username: ")
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
-    # kb.delete_all()
+    kb.delete_all()
     confidence_table = ConfidenceTable(kb, saf_weight=0.5, nsaf_weight=0.5, base_confidence=0.8)
     confidence_table.register_declarator('Wikipedia', static_confidence=1.0)
     for declarator in kb.get_all_declarators():
@@ -76,9 +76,11 @@ def main():
         word = text.split(" ")[0]
 
         respond_to_query = True
+        bool_query = False
         
         try:
-            if word[0].lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
+            #print(f"{word.lower() = }")
+            if word.lower() in ["what", "where", "who"] or text[-1].lower() in ["?"]:
                 content, bool_query = query_knowledge(user, doc, kb)
                 #print(content)
             else:
@@ -195,7 +197,7 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         ent1 = extract_entity(Entity(root), nsubject, [])
         ent2 = extract_entity(Entity(entity2), entity2, [])
 
-        print(f"Question triplet particular: {ent1}, {rel}, {ent2}")
+        #print(f"Question triplet particular: {ent1}, {rel}, {ent2}")
         return query_boolean(ent1, rel, ent2, kb), bool_query
     
     nsubject = possible_subjects[0]
@@ -223,17 +225,17 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
         ent = str(extract_entity(Entity(entity1), nsubject, []))
         rel = root.lemma_
 
-        print(f"Question dupla: {ent}, {rel}")
+        #print(f"Question dupla: {ent}, {rel}")
         
         query = kb.query_inheritance_relation(ent, str(rel))
-        print(query)
+        #print(query)
         
-        return (entity1, rel, query), bool_query
+        return (entity1, rel, query, ent), bool_query
     else:
         ent1 = extract_entity(Entity(entity1), nsubject, [])
         ent2 = extract_entity(Entity(entity2[0]), nsubject, [])
 
-        print(f"Question tripla bool: {ent1}, {rel}, {ent2}")
+        #print(f"Question tripla bool: {ent1}, {rel}, {ent2}")
         
         query = query_boolean(entity1, rel, entity2[0], kb, relation_negated)
 
