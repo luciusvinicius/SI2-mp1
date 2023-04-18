@@ -43,9 +43,11 @@ def get_entity_type(token) -> EntityType:
 def main():
     user = input("Please insert your username: ")
     kb = KnowledgeBase("bolt://localhost:7687", "neo4j", "Sussy_baka123321")
-    kb.delete_all()
+    # kb.delete_all()
     confidence_table = ConfidenceTable(kb, saf_weight=0.5, nsaf_weight=0.5, base_confidence=0.8)
     confidence_table.register_declarator('Wikipedia', static_confidence=1.0)
+    for declarator in kb.get_all_declarators():
+        confidence_table.register_declarator(declarator)
     nlp = init()
     print("(!) Hello, how can I help you? (q! - quit)")
     while True:
@@ -100,6 +102,7 @@ def main():
                     if kb.assert_relation_inheritance(relation, declarator=user):
                         confidence = 1.0
                     else:
+                        # TODO: missing inheritance :/
                         confidence = confidence_table.get_relation_confidence(relation)
                     response = bool_response(result, confidence)
 
