@@ -352,6 +352,7 @@ def extract_entity(entity, subject, knowledge):
         if child.dep_ == "poss":
             ent2 = copy(entity)
             entity = entity.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
+            # TODO: if possessive has proper noun as child then it's an instance
             rel = "Instance"
             triplet = Triples(ent1=entity, ent2=ent2, rel=rel)
             triplet.not_ = False
