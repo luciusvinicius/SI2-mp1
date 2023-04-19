@@ -314,54 +314,9 @@ def add_knowledge(user:str, doc, kb: KnowledgeBase):
     # print(root)
 
     # print("NSUBJ")
-    children = list(reversed(list(nsubject.children)))
-    for child in children:
-        # print(f"{child} {child.pos_} {child.dep_}")
-        if child.dep_ == "poss":
-            ent2 = copy(entity1)
-            entity1 = entity1.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
-            entity1.type_ = EntityType.INSTANCE if child.pos_ == 'PROPN' else EntityType.TYPE
-            rel = "Instance"
-            triplet = Triples(ent1=entity1, ent2=ent2, rel=rel)
-            triplet.not_ = False
-            knowledge.append(triplet)
-
-            ent1 = Entity(child)
-            ent2 = entity1#.prefix(child)
-            rel = "have"
-            triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
-            triplet.not_ = False
-            knowledge.append(triplet)
-        elif child.dep_ in ["amod", "npadvmod", "nummod"]:
-            entity1.prefix(child)
-            new_children = child.children
-            children.extend(new_children)
-        elif nsubject.dep_ == "xcomp" and child.dep_ == "dobj":
-            entity1.sufix(child)
+    extract_entity(entity1, nsubject, knowledge)
     # print("NOBJ")
-    children = list(reversed(list(nobj.children)))
-    for child in children:
-        # print(f"{child} {child.pos_} {child.dep_}")
-        if child.dep_ == "poss":
-            ent2 = copy(entity2)
-            entity2 = entity2.prefix(Entity(child).append([c for c in child.children if c.dep_ == "case"][0]))
-            rel = "Instance"
-            triplet = Triples(ent1=entity2, ent2=ent2, rel=rel)
-            triplet.not_ = False
-            knowledge.append(triplet)
-
-            ent1 = Entity(child)
-            ent2 = entity2#.prefix(child)
-            rel = "have"
-            triplet = Triples(ent1=ent1, ent2=ent2, rel=rel)
-            triplet.not_ = False
-            knowledge.append(triplet)
-        elif child.dep_ in ["amod", "npadvmod", "nummod"]:
-            entity2.prefix(child)
-            new_children = child.children
-            children.extend(new_children)
-        elif nobj.dep_ == "xcomp" and child.dep_ == "dobj":
-            entity2.sufix(child)
+    extract_entity(entity2, nobj, knowledge)
     # print('Negated?', 'Yes' if relation_negated else 'No')
 
     base_triplet = Triples(entity1, entity2, relation)

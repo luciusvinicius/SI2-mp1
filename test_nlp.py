@@ -82,7 +82,7 @@ def test_phrase4(user, nlp, initialize_knowledge_base):
     output = [
         # TODO ainda acho que aqui é "Diogo's favorite dish", não "favorite dish" (do jeito que tá definido pelo menos)
         Triples(ent1=Entity("Diogo's favorite dish", False), rel="be", ent2=Entity("pasta", False)), 
-        Triples(ent1=Entity("Diogo", False), rel="has", ent2=Entity("Diogo's favorite dish", False)),
+        Triples(ent1=Entity("Diogo", False), rel="have", ent2=Entity("Diogo's favorite dish", False)),
         Triples(ent1=Entity("Diogo's favorite dish", False), ent2=Entity("favorite dish", False), rel="Instance")
     ] 
     
@@ -100,7 +100,7 @@ def test_phrase5(user, nlp, initialize_knowledge_base):
     doc = nlp(text)
     output = [ 
         Triples(ent1=Entity("Lucius", False), rel="like", ent2=Entity("Dinis's green house", False)),
-        Triples(ent1=Entity("Dinis", False), rel="has", ent2=Entity("Dinis's green house", False)),
+        Triples(ent1=Entity("Dinis", False), rel="have", ent2=Entity("Dinis's green house", False)),
         Triples(ent1=Entity("Dinis's green house", False), rel="Instance", ent2=Entity("green house", False))
     ] 
     
@@ -118,7 +118,7 @@ def test_phrase6(user, nlp, initialize_knowledge_base):
     doc = nlp(text)
     output = [
         Triples(ent1=Entity("Lucius", False), rel="like", ent2=Entity("Dinis's green house", False)),
-        Triples(ent1=Entity("Dinis", False), rel="has", ent2=Entity("Dinis's green house", False)),
+        Triples(ent1=Entity("Dinis", False), rel="have", ent2=Entity("Dinis's green house", False)),
         Triples(ent1=Entity("Dinis's green house", False), rel="Instance", ent2=Entity("green house", False))
     ]
     output[0].not_ = True
@@ -154,9 +154,9 @@ def test_phrase8(user, nlp, initialize_knowledge_base):
     doc = nlp(text)
     output = [
         Triples(ent1=Entity("Diogo's book", False), rel="Instance", ent2=Entity("book", False)),
-        Triples(ent1=Entity("Diogo", False), rel="has", ent2=Entity("Diogo's book", False)),
+        Triples(ent1=Entity("Diogo", False), rel="have", ent2=Entity("Diogo's book", False)),
         Triples(ent1=Entity("Dinis's book", False), rel="Instance", ent2=Entity("book", False)),
-        Triples(ent1=Entity("Dinis", False), rel="has", ent2=Entity("Dinis's book", False)),
+        Triples(ent1=Entity("Dinis", False), rel="have", ent2=Entity("Dinis's book", False)),
         Triples(ent1=Entity("Diogo's book", False), rel="look like", ent2=Entity("Dinis's book", False)),
     ]
 
