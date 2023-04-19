@@ -187,6 +187,7 @@ def query_knowledge(user:str, doc, kb: KnowledgeBase):
     # e.g.: "Does Diogo like rice?"
     if len(possible_subjects) == 0:
         bool_query = True
+        # TODO: not working properly, extract_entity borks some sentences (e.g. "Are beans great?")
         if root.lemma_ == "be":
             nsubject = [token for token in root.children if token.dep_ == "attr"][0]
             rel = root.lemma_
