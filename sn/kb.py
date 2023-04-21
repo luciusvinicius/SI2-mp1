@@ -98,6 +98,7 @@ class KnowledgeBase:
         `relation.name` is the name given to the relation, and is only relevant with the OTHER relation type.
 
         `relation` should not have `None` values for the type fields.
+        Additionally, for inheritance (INHERITS) relations the second entity should always be a TYPE, not an INSTANCE.
 
         If the declaration of the inverse relation already exists, then it is replaced by the new declaration.
         """
@@ -126,10 +127,9 @@ class KnowledgeBase:
     
     @sn_read
     @staticmethod
-    def query_declarations(declarator:str, tx: ManagedTransaction=None) -> Set[Relation]:
-        """Query a declarator to obtain all declarations made by it.
-        Output: `[relation1, relation2, (...)]`
-        """
+    def query_declarations(declarator: str, tx: ManagedTransaction=None) -> Set[Relation]:
+        """Query a declarator to obtain the set of all declarations made by it."""
+
         results = tx.run("MATCH (e1)-[r {declarator: $declarator}]->(e2) "
                         "RETURN e1.name AS ent1, labels(e1)[0] AS ent1_type, type(r) AS relation_type, r.name AS relation, e2.name AS ent2, labels(e2)[0] AS ent2_type, r.not AS not", declarator=declarator)
         
@@ -146,7 +146,7 @@ class KnowledgeBase:
     @sn_read
     @staticmethod
     def query_declarators(relation: Relation, tx: ManagedTransaction=None) -> Set[str]:
-        """Obtain all declarators that declared the given relation."""
+        """Obtain all declarators that declared the given relation. Types are optional."""
 
         e1_label, e2_label, rel_type = KnowledgeBase._return_optional_labels(relation)
 
@@ -157,9 +157,9 @@ class KnowledgeBase:
 
     @sn_read
     @staticmethod
-    def query_local(ent:str, tx: ManagedTransaction=None) -> Set[Tuple[Tuple[str, str], Set[str]]]:
-        """Query an entity to obtain the relations and its entities.
-        Output: `[((relation_name, relation_type), [entity2, entity3]), (...)]`
+    def query_local(ent: str, tx: ManagedTransaction=None) -> Set[Tuple[Tuple[str, str], Set[str]]]:
+        """Query an entity to obtain all relations and target entities locally. \n
+        Output: `{((relation_name, relation_type), {entity2, entity3}), (...)}`
         """
         
         results = tx.run("MATCH (eIn {name: $entIn})-[r]->(eOut)"
@@ -181,7 +181,7 @@ class KnowledgeBase:
     @sn_read
     @staticmethod
     def query_local_relation(ent:str, relation:str, relation_type:RelType, tx: ManagedTransaction=None) -> Set[str]:
-        """Query an entity to obtain the entities of a specific relation."""
+        """Query an entity to obtain all target entities of a specific relation locally."""
         
         results = tx.run(f"MATCH (e {{name: $ent}})-[r:{relation_type.value} {{name: $relation}}]->(e2) "
                         "RETURN e2.name AS entity", ent=ent, relation=relation)
@@ -190,9 +190,10 @@ class KnowledgeBase:
 
     @sn_read
     @staticmethod
-    def query_inheritance_relation(ent:str, relation:str, declarator:str=None, tx: ManagedTransaction=None) ->  Dict[str, Tuple[Set[Tuple[str, bool]], int]]:
-        """Query the specified attribute of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations.
-        The output is each Entity in the key, the characteristics, truth values and distance as the tuple elements"""
+    def query_inheritance_relation(ent: str, relation: str, declarator: str=None, tx: ManagedTransaction=None) ->  Dict[str, Tuple[Set[Tuple[str, bool]], int]]:
+        """Query the specified attribute of an entity as well as attributes inherited from INHERITS relations. \n
+        A declarator can be optionally provided to only consider relations declared by it (doesn't filter INHERITS relations). \n
+        The output is a dictionary with each entity as the key, and the characteristics, truth values and inheritance length as the values."""
         
         declarator_filter = f", declarator: '{declarator}'" if declarator is not None else ""
 
@@ -210,9 +211,9 @@ class KnowledgeBase:
 
     @sn_read
     @staticmethod
-    def query_descendants_relation(ent:str, relation:str, relation_type:RelType=None, not_:bool=False, tx: ManagedTransaction=None) -> Set[str]:
-        """Query the specified *local* attribute of entity descendants"""
-        
+    def query_descendants_relation(ent: str, relation: str, relation_type: RelType=None, not_: bool=False, tx: ManagedTransaction=None) -> Set[str]:
+        """Query the specified relation of an entity's descendants, obtaining all target entities. Relation type is optional."""
+
         rel_label = f':{relation_type.value}' if relation_type is not None else ''
 
         results = tx.run(f"MATCH (eOut)<-[{rel_label} {{name: $relation, not: $not_}}]-(desc)-[r:{RelType.INHERITS.value} *1..]->(eIn {{name: $entIn}}) "
@@ -223,13 +224,18 @@ class KnowledgeBase:
     @sn_read
     @staticmethod
     def assert_relation(relation: Relation, declarator: str=None, tx: ManagedTransaction=None) -> bool:
-        """Assert whether or not `relation` exists in the knowledge base"""
+        """Assert whether or not `relation` exists in the knowledge base. Types are optional. \n
+        A declarator can be optionally provided to only consider relations declared by it.
+        """
         return KnowledgeBase._tx_assert_relation_exists(relation, tx, declarator)
 
     @sn_read
     @staticmethod
     def assert_relation_inheritance(relation: Relation, declarator: str=None, tx: ManagedTransaction=None) -> Set[Tuple[str, int]]:
-        """Assert whether or not `relation` exists in the knowledge base, with inheritance"""
+        """Assert whether or not `relation` exists in the knowledge base, with inheritance. Types are optional. \n
+        A declarator can be optionally provided to only consider relations declared by it (doesn't filter INHERITS relations). \n
+        The output is the set of parent entities on which the relation exists and how long the inheritance chain is.
+        """
 
         e1_label, e2_label, rel_label = KnowledgeBase._return_optional_labels(relation)
         declarator_filter = f", declarator: '{declarator}'" if declarator is not None else ""
@@ -257,6 +263,8 @@ class KnowledgeBase:
     @sn_write
     @staticmethod
     def delete_all(tx: ManagedTransaction=None):
+        """Clean the knowledge base."""
+
         result = tx.run("MATCH (a) -[r]-> () DELETE a, r")
         result = tx.run("MATCH (a) DELETE a")
         return result.single()
