@@ -60,7 +60,7 @@ def test_question1(user, nlp, data1):
     
     kb = data1
     
-    (ent1, relation, query), _ = query_knowledge(user, doc, kb)
+    (ent1, relation, query, _), _ = query_knowledge(user, doc, kb)
     
     assert output == (str(ent1), str(relation), query)
 
