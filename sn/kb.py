@@ -187,32 +187,6 @@ class KnowledgeBase:
                         "RETURN e2.name AS entity", ent=ent, relation=relation)
         
         return {result.value("entity") for result in results}
-        
-    # TODO: determine what the return format is
-    @sn_read
-    @staticmethod
-    def query_inheritance(ent:str, tx: ManagedTransaction=None) -> Dict[str, Tuple[Set[str], int]]:
-        """Query all local attributes of an entity as well as attributes inherited from INHERITS relations"""
-        
-        # logicks: query_local for ent + query_inheritance for ascendants
-        
-        # first: query_local on ent
-
-        # second: get ascendants (INSTANCE/SUBTYPE rels)
-
-        # third: query_inheritance on each ascendant and append result
-        
-        results = tx.run(
-            f"MATCH (ent1 {{name:$ent}}) "
-            "MATCH (ent1)-[r]->(ent2) "
-            "RETURN ent1.name AS subject, collect(ent2.name) AS characteristics, 0 AS distance "
-            "UNION "
-            f"MATCH p = (ent1 {{name:$ent}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
-            "MATCH (ascn)-[r]->(ent2) "
-            "RETURN ascn.name AS subject, collect(ent2.name) AS characteristics, length(p) AS distance", ent=ent
-        )
-        
-        return {result.value('subject'):(frozenset(result.value('characteristics')), result.value('distance')) for result in results}
 
     @sn_read
     @staticmethod
@@ -220,7 +194,6 @@ class KnowledgeBase:
         """Query the specified attribute of an entity as well as attributes inherited from INSTANCE and SUBTYPE relations.
         The output is each Entity in the key, the characteristics, truth values and distance as the tuple elements"""
         
-        # TODO: cypher injection
         declarator_filter = f", declarator: '{declarator}'" if declarator is not None else ""
 
         results = tx.run(
@@ -270,13 +243,6 @@ class KnowledgeBase:
             "RETURN ascn.name AS subject, length(p) AS distance", ent1=relation.ent1, ent2=relation.ent2, relation=relation.name, not_=relation.not_
         )
 
-        # results = tx.run(
-        #     f"RETURN exists(({e1_label} {{name: $ent1}})-[{rel_label} {{name: $relation, not: $not_ {declarator_filter}}}]->({e2_label} {{name: $ent2}})) AS relation_exists "
-        #     "UNION ALL "
-        #     f"MATCH (e1{e1_label} {{name: $ent1}})-[:{RelType.INHERITS.value} *1..]->(ascn) "
-        #     f"RETURN exists((ascn)-[{rel_label} {{name: $relation, not: $not_ {declarator_filter}}}]->({e2_label} {{name: $ent2}})) AS relation_exists", ent1=relation.ent1, ent2=relation.ent2, relation=relation.name, not_=relation.not_
-        # )
-
         return {(result.value("subject"), result.value("distance")) for result in results}
 
     @sn_read
@@ -308,9 +274,6 @@ class KnowledgeBase:
         e2_label = f':{relation.ent2_type.value}' if relation.ent2_type is not None else ''
         rel_label = f':{relation.type_.value}' if relation.type_ is not None else ''
         return e1_label, e2_label, rel_label
-
-    # # # # nice >:]
-
 
 
 
